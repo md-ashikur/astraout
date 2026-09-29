@@ -1145,7 +1145,7 @@ function GameHUD({
       {/* ── MAIN AREA ── */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* Deep Space Background Atmosphere */}
-        <div className="absolute inset-0 z-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900/40 via-slate-950 to-black pointer-events-none" />
+        <div className="absolute inset-0 z-0 bg-[radial-gradient(ellipse_at_top,var(--tw-gradient-stops))] from-slate-900/40 via-slate-950 to-black pointer-events-none" />
 
         {/* ─── LEFT: Gauges & Systems (Collapsible on Cinematic) ─── */}
         {!isCinematicFullscreen && (
@@ -1358,7 +1358,7 @@ function GameHUD({
           </div>
 
           {/* Full-size 3D Canvas Viewport */}
-          <div className="flex-1 w-full h-full min-h-[360px] sm:min-h-[460px] rounded-3xl overflow-hidden border border-cyan-500/30 bg-slate-950/40 backdrop-blur-sm shadow-[0_0_50px_rgba(6,182,212,0.15)] relative">
+          <div className="flex-1 w-full h-full min-h-90 sm:min-h-115 rounded-3xl overflow-hidden border border-cyan-500/30 bg-slate-950/40 backdrop-blur-sm shadow-[0_0_50px_rgba(6,182,212,0.15)] relative">
             <Suspense
               fallback={
                 <div className="w-full h-full flex items-center justify-center bg-slate-950">

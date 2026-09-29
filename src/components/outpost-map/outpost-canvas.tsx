@@ -65,13 +65,13 @@ export const OutpostCanvas: React.FC<OutpostCanvasProps> = ({
 
       {/* Surface Base Map Area */}
       <div
-        className={`relative w-full min-h-[380px] p-6 select-none transition-colors duration-1000 ${isMoon
+        className={`relative w-full min-h-95 p-6 select-none transition-colors duration-1000 ${isMoon
             ? 'bg-linear-to-b from-slate-900 via-slate-950 to-neutral-950'
             : 'bg-linear-to-b from-stone-900 via-stone-950 to-red-950/60'
           }`}
       >
         {/* Subtle grid pattern overlay */}
-        <div className="absolute inset-0 opacity-15 bg-[radial-gradient(#38bdf8_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none" />
+        <div className="absolute inset-0 opacity-15 bg-[radial-gradient(#38bdf8_1px,transparent_1px)] bg-size-[24px_24px] pointer-events-none" />
 
         {/* Base Blueprint Interconnect Conduits (SVG lines connecting modules) */}
         <svg className="absolute inset-0 w-full h-full pointer-events-none stroke-cyan-500/20 stroke-2 stroke-dasharray-[4,4]">

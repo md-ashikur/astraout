@@ -169,7 +169,10 @@ export const OutpostCanvas: React.FC<OutpostCanvasProps> = ({
                 }`}
             >
               <span className="text-sm">{member.avatar}</span>
-              <span className="font-semibold">{member.name.split(' ')[0]}</span>
+              <span className="font-semibold text-slate-100">{member.name}</span>
+              <span className="text-[10px] text-cyan-400 font-bold">
+                ({member.role})
+              </span>
               <span className="text-[10px] text-slate-400 uppercase">
                 [{member.status}]
               </span>

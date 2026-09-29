@@ -3,6 +3,7 @@
 
 [![Next.js](https://img.shields.io/badge/Next.js-16.3-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19.2-blue?style=for-the-badge&logo=react)](https://react.dev/)
+[![Yarn](https://img.shields.io/badge/Yarn-1.22.22-2C8EBB?style=for-the-badge&logo=yarn&logoColor=white)](https://yarnpkg.com/)
 [![Three.js](https://img.shields.io/badge/Three.js-r186-black?style=for-the-badge&logo=three.js)](https://threejs.org/)
 [![TailwindCSS](https://img.shields.io/badge/TailwindCSS-v4-38B2AC?style=for-the-badge&logo=tailwind-css)](https://tailwindcss.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
@@ -13,39 +14,49 @@ An interactive, high-fidelity 3D space survival and habitat simulation built for
 
 ## 📋 Table of Contents
 1. [Prerequisites & System Requirements](#-prerequisites--system-requirements)
-2. [Step-by-Step Installation](#-step-by-step-installation)
+2. [Step-by-Step Installation (with Yarn)](#-step-by-step-installation-with-yarn)
 3. [Running the Application](#-running-the-application)
-4. [Controls & How to Play](#-controls--how-to-play)
-5. [The Outpost Crew & Their Roles](#-the-outpost-crew--their-roles)
-6. [Core Subsystems & NASA Technologies](#-core-subsystems--nasa-technologies)
-7. [Project Architecture](#-project-architecture)
-8. [Troubleshooting & FAQ](#-troubleshooting--faq)
+4. [Yarn Command Cheat Sheet](#-yarn-command-cheat-sheet)
+5. [Controls & How to Play](#-controls--how-to-play)
+6. [The Outpost Crew & Their Roles](#-the-outpost-crew--their-roles)
+7. [Core Subsystems & NASA Technologies](#-core-subsystems--nasa-technologies)
+8. [Project Architecture](#-project-architecture)
+9. [Troubleshooting & FAQ](#-troubleshooting--faq)
 
 ---
 
 ## 💻 Prerequisites & System Requirements
 
-Before running the project, make sure your computer has the following installed:
+Before running the project, make sure your computer has **Node.js** and **Yarn** installed:
 
 | Requirement | Minimum Version | Recommended | Notes |
 | :--- | :--- | :--- | :--- |
 | **Node.js** | `v18.18.0`+ | `v20.x` or `v22.x` (LTS) | [Download Node.js](https://nodejs.org/) |
-| **Package Manager** | `yarn 1.22.x` or `npm 9.x`+ | `yarn` | Built with Yarn package manager |
+| **Package Manager** | `yarn 1.22.x` | `yarn@1.22.22` | Configured in `package.json` |
 | **Web Browser** | WebGL 2.0 compatible | Chrome, Brave, Edge, Firefox, Safari | Hardware acceleration enabled |
 | **Operating System** | macOS, Linux, or Windows 10/11 | Any | Cross-platform |
 
-> [!TIP]
-> To verify your Node.js and Yarn installation, open your terminal and run:
-> ```bash
-> node -v
-> yarn -v
-> # or if using npm:
-> npm -v
-> ```
+### 🛠️ Installing Yarn (If not already installed)
+If you don't have Yarn installed yet, you can easily install or enable it:
+
+```bash
+# Option A: Enable via Corepack (Built into Node.js 18+ / 20+ / 22+)
+corepack enable
+corepack prepare yarn@1.22.22 --activate
+
+# Option B: Or install globally via npm
+npm install -g yarn
+```
+
+To verify your installation:
+```bash
+node -v    # Should output v18.18.0 or newer
+yarn -v    # Should output 1.22.22 (or 1.22.x)
+```
 
 ---
 
-## 📦 Step-by-Step Installation
+## 📦 Step-by-Step Installation (with Yarn)
 
 ### 1. Clone or Open the Repository
 Open your terminal and navigate to the project directory:
@@ -53,18 +64,13 @@ Open your terminal and navigate to the project directory:
 cd /path/to/nasa-project-test
 ```
 
-### 2. Install Project Dependencies
-Install all required packages using **Yarn** (recommended) or **npm**:
-
+### 2. Install Dependencies
+Run Yarn to install all required dependencies:
 ```bash
-# Using Yarn (Recommended)
 yarn install
-
-# Or using npm
-npm install
 ```
 
-#### What gets installed:
+#### What Yarn installs:
 - **`next` (v16.3)**: React framework with App Router, Turbopack, and SSR/SSG.
 - **`react` & `react-dom` (v19.2)**: Core UI rendering engine.
 - **`three` & `@react-three/fiber`**: WebGL 3D rendering pipeline for the planetary surface and outpost modules.
@@ -83,7 +89,6 @@ Start the local Next.js development server:
 
 ```bash
 yarn dev
-# or: npm run dev
 ```
 
 Once started, open your web browser and navigate to:
@@ -91,32 +96,43 @@ Once started, open your web browser and navigate to:
 http://localhost:3000
 ```
 
-The dev server features hot module replacement (HMR), so code edits refresh automatically.
+The dev server features Hot Module Replacement (HMR), so any changes you make in `src/` will refresh automatically.
 
 ---
 
 ### Production Build & Launch
-To test the optimized production build locally:
+To compile and test the optimized production build locally:
 
 ```bash
 # 1. Compile and bundle the application
 yarn build
-# or: npm run build
 
 # 2. Run the production server
 yarn start
-# or: npm run start
 ```
 
-### Linting & Code Verification
-Check for any type or linting issues:
+### Code Quality & Type Checking
 ```bash
-# Run ESLint
+# Run ESLint check
 yarn lint
 
 # Run TypeScript type check
 npx tsc --noEmit
 ```
+
+---
+
+## ⚡ Yarn Command Cheat Sheet
+
+| Command | Action | Description |
+| :--- | :--- | :--- |
+| `yarn install` | Install Packages | Installs all dependencies from `yarn.lock` and `package.json` |
+| `yarn dev` | Start Dev Server | Launches Next.js dev server on [http://localhost:3000](http://localhost:3000) with HMR |
+| `yarn build` | Compile App | Generates production build in `.next/` |
+| `yarn start` | Run Production | Serves the production build locally |
+| `yarn lint` | Lint Codebase | Runs Next.js ESLint validation |
+| `yarn add <pkg>` | Add Dependency | Installs and adds a package to `dependencies` |
+| `yarn add -D <pkg>` | Add Dev Dependency | Installs and adds a package to `devDependencies` |
 
 ---
 

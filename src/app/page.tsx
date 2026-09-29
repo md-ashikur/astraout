@@ -13,6 +13,8 @@ import { tickSimulation } from '../engine/simulation-core';
 import { getInitialScenario } from '../engine/default-scenarios';
 import { soundFx } from '../audio/sound-synthesizer';
 import type { PlanetSceneProps } from '../components/game-3d/planet-scene';
+import type { PlanetSelectSceneProps } from '../components/game-3d/planet-select-scene';
+import type { MiniOutpostSceneProps } from '../components/game-3d/mini-outpost-scene';
 
 // ── Dynamic 3D imports ───────────────────────────────────────
 const HomeScene = dynamic(
@@ -23,11 +25,11 @@ const PlanetScene = dynamic<PlanetSceneProps>(
   () => import('../components/game-3d/planet-scene').then(m => ({ default: m.PlanetScene })),
   { ssr: false }
 );
-const PlanetSelectScene = dynamic(
+const PlanetSelectScene = dynamic<PlanetSelectSceneProps>(
   () => import('../components/game-3d/planet-select-scene').then(m => ({ default: m.PlanetSelectScene })),
   { ssr: false }
 );
-const MiniOutpostScene = dynamic(
+const MiniOutpostScene = dynamic<MiniOutpostSceneProps>(
   () => import('../components/game-3d/mini-outpost-scene').then(m => ({ default: m.MiniOutpostScene })),
   { ssr: false }
 );
@@ -144,47 +146,57 @@ function PlanetSelectScreen({ onSelect, onBack }: { onSelect: (loc: OutpostLocat
   const planets = [
     {
       id: 'moon' as OutpostLocation,
-      emoji: '🌕', name: 'THE MOON',
+      emoji: '🌕',
+      name: 'THE MOON',
       sub: 'Artemis Base Alpha',
-      desc: 'Shackleton Crater',
+      desc: 'Shackleton Crater • Lunar South Pole',
       color: 'cyan',
       border: 'border-cyan-400',
-      shadow: 'shadow-[0_0_40px_rgba(6,182,212,0.5)]',
-      bg: 'from-slate-900 to-slate-800',
-      facts: ['3 days from Earth', '14-day nights', 'Ice water reserves'],
-      diff: '⭐ Beginner',
+      shadow: 'shadow-[0_0_40px_rgba(6,182,212,0.4)]',
+      bg: 'from-slate-900/90 via-slate-900/60 to-slate-950/80',
+      facts: ['3 Days Trans-Lunar Flight', '14-Day Cryogenic Nights', 'Permanently Shadowed Ice'],
+      telemetry: { gravity: '0.166g', dist: '384k km', sol: '28 Earth Days', hazard: 'Solar Flares' },
+      diff: '⭐ Recommended for New Recruits',
     },
     {
       id: 'mars' as OutpostLocation,
-      emoji: '🔴', name: 'MARS',
+      emoji: '🔴',
+      name: 'MARS',
       sub: 'Ares Outpost Prime',
-      desc: 'Jezero Crater Basin',
+      desc: 'Jezero Crater Basin • Ancient Delta',
       color: 'orange',
       border: 'border-orange-400',
-      shadow: 'shadow-[0_0_40px_rgba(251,146,60,0.5)]',
-      bg: 'from-slate-900 to-red-950',
-      facts: ['9 months travel', 'Dust storms', 'Make your own air'],
-      diff: '⭐⭐ Advanced',
+      shadow: 'shadow-[0_0_40px_rgba(251,146,60,0.4)]',
+      bg: 'from-slate-900/90 via-red-950/60 to-slate-950/80',
+      facts: ['9 Months Interplanetary Cruise', 'Global Regolith Dust Storms', 'ISRU CO₂ Atmospheric Extraction'],
+      telemetry: { gravity: '0.380g', dist: '225M km', sol: '24h 37m', hazard: 'Dust Storms' },
+      diff: '⭐⭐ Advanced Commander Mission',
     },
   ];
 
   return (
     <div className="fixed inset-0 bg-slate-950 overflow-hidden">
-      {/* 3D Background */}
+      {/* 3D Background with direct click & hover */}
       <div className="absolute inset-0">
         <Suspense fallback={null}>
-          <PlanetSelectScene hoveredPlanet={hovered} selectedPlanet={selected} />
+          <PlanetSelectScene
+            hoveredPlanet={hovered}
+            selectedPlanet={selected}
+            onSelectPlanet={handleSelect}
+            onHoverPlanet={setHovered}
+          />
         </Suspense>
       </div>
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_20%,rgba(2,6,23,0.6)_100%)]" />
-      <div className="absolute bottom-0 left-0 right-0 h-64 bg-linear-to-t from-slate-950 to-transparent" />
-      <div className="absolute top-0 left-0 right-0 h-32 bg-linear-to-b from-slate-950 to-transparent" />
 
-      <div className="relative z-10 h-full flex flex-col items-center justify-center gap-8 px-6">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_20%,rgba(2,6,23,0.65)_100%)] pointer-events-none" />
+      <div className="absolute bottom-0 left-0 right-0 h-64 bg-linear-to-t from-slate-950 via-slate-950/80 to-transparent pointer-events-none" />
+      <div className="absolute top-0 left-0 right-0 h-32 bg-linear-to-b from-slate-950 to-transparent pointer-events-none" />
+
+      <div className="relative z-10 h-full flex flex-col items-center justify-between py-6 px-6">
         {/* Back button */}
         <button
           onClick={() => { soundFx.playClick(); onBack(); }}
-          className="absolute top-6 left-6 flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-700 bg-slate-900/80 backdrop-blur-md text-slate-400 hover:text-white hover:border-slate-500 transition-all duration-200 text-xs font-mono font-bold group"
+          className="self-start flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-700 bg-slate-900/80 backdrop-blur-md text-slate-400 hover:text-white hover:border-slate-500 transition-all duration-200 text-xs font-mono font-bold group shadow-lg"
         >
           <svg className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -192,50 +204,124 @@ function PlanetSelectScreen({ onSelect, onBack }: { onSelect: (loc: OutpostLocat
           BACK
         </button>
 
-        <FadeIn>
-          <div className="text-center mb-2">
-            <div className="text-[11px] font-mono text-cyan-400 tracking-[0.3em] uppercase mb-2">Step 1 of 2</div>
-            <h2 className="text-3xl sm:text-4xl font-black font-mono text-white">Choose Your World</h2>
+        {/* Header HUD */}
+        <FadeIn className="text-center mt-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950/60 border border-cyan-500/30 text-[10px] font-mono text-cyan-400 tracking-[0.25em] uppercase mb-1.5 shadow-[0_0_15px_rgba(6,182,212,0.2)]">
+            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+            NASA Trajectory Acquisition • Step 1 of 2
           </div>
+          <h2 className="text-3xl sm:text-5xl font-black font-mono text-white tracking-tight drop-shadow-md">
+            CHOOSE YOUR WORLD
+          </h2>
+          <p className="text-xs font-mono text-slate-400 mt-1">
+            👆 Click a 3D celestial body directly or select a mission telemetry console
+          </p>
+        </FadeIn>
 
-          <div className="grid grid-cols-2 gap-5 max-w-2xl w-full mx-auto mt-4">
-            {planets.map(p => (
-              <button
+        {/* Telemetry Pods */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl w-full mx-auto mb-4">
+          {planets.map(p => {
+            const isHovered = hovered === p.id;
+            const isSelected = selected === p.id;
+            const isMoon = p.id === 'moon';
+
+            return (
+              <div
                 key={p.id}
-                onMouseEnter={() => setHovered(p.id)}
+                onMouseEnter={() => {
+                  soundFx.playBeep(isMoon ? 880 : 660, 0.04);
+                  setHovered(p.id);
+                }}
                 onMouseLeave={() => setHovered(null)}
                 onClick={() => handleSelect(p.id)}
-                className={`relative flex flex-col items-center gap-3 p-6 rounded-3xl border-2 transition-all duration-300
+                className={`relative flex flex-col justify-between p-5 rounded-3xl border-2 transition-all duration-300 cursor-pointer
                   bg-linear-to-b ${p.bg} backdrop-blur-xl
-                  ${selected === p.id ? `${p.border} ${p.shadow} scale-105` : hovered === p.id ? `${p.border} scale-102` : 'border-slate-700/60'}
-                  hover:${p.border} hover:scale-105 cursor-pointer`}
+                  ${isSelected
+                    ? `${p.border} ${p.shadow} scale-[1.03] ring-2 ring-cyan-400/40`
+                    : isHovered
+                    ? `${p.border} scale-[1.02] shadow-[0_0_25px_rgba(15,23,42,0.8)]`
+                    : 'border-slate-800/80 hover:border-slate-600'}
+                `}
               >
-                {selected === p.id && (
-                  <div className="absolute top-3 right-3">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                {/* Header row */}
+                <div className="flex items-center justify-between border-b border-slate-700/40 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-3xl sm:text-4xl">{p.emoji}</span>
+                    <div>
+                      <div className="text-base sm:text-lg font-black font-mono text-white tracking-wide">{p.name}</div>
+                      <div className="text-[10px] font-mono text-cyan-400">{p.sub}</div>
+                    </div>
                   </div>
-                )}
-                <div className="text-6xl">{p.emoji}</div>
-                <div className="text-center">
-                  <div className="text-xl font-black font-mono text-white">{p.name}</div>
-                  <div className="text-xs text-slate-400 font-mono mt-0.5">{p.desc}</div>
+                  {isSelected ? (
+                    <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-400 text-emerald-400 text-[10px] font-mono font-bold animate-pulse">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      LOCKED
+                    </div>
+                  ) : (
+                    <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg border ${
+                      isMoon ? 'bg-cyan-950/40 border-cyan-500/40 text-cyan-300' : 'bg-orange-950/40 border-orange-500/40 text-orange-300'
+                    }`}>
+                      {p.telemetry.dist}
+                    </span>
+                  )}
                 </div>
 
-                <div className="space-y-1.5 w-full">
+                {/* Telemetry Matrix Grid */}
+                <div className="grid grid-cols-4 gap-2 py-3 border-b border-slate-700/40 text-center font-mono">
+                  <div className="bg-slate-900/60 p-1.5 rounded-xl border border-slate-800">
+                    <div className="text-[8px] text-slate-400 uppercase">Gravity</div>
+                    <div className="text-[11px] font-black text-white">{p.telemetry.gravity}</div>
+                  </div>
+                  <div className="bg-slate-900/60 p-1.5 rounded-xl border border-slate-800">
+                    <div className="text-[8px] text-slate-400 uppercase">Flight Time</div>
+                    <div className="text-[11px] font-black text-cyan-400">{p.facts[0].split(' ')[0]} {p.facts[0].split(' ')[1]}</div>
+                  </div>
+                  <div className="bg-slate-900/60 p-1.5 rounded-xl border border-slate-800">
+                    <div className="text-[8px] text-slate-400 uppercase">Day Cycle</div>
+                    <div className="text-[11px] font-black text-white">{p.telemetry.sol}</div>
+                  </div>
+                  <div className="bg-slate-900/60 p-1.5 rounded-xl border border-slate-800">
+                    <div className="text-[8px] text-slate-400 uppercase">Hazard</div>
+                    <div className="text-[10px] font-bold text-amber-400 truncate">{p.telemetry.hazard}</div>
+                  </div>
+                </div>
+
+                {/* Facts list */}
+                <div className="space-y-1.5 py-3">
                   {p.facts.map(f => (
                     <div key={f} className="flex items-center gap-2 text-[11px] font-mono text-slate-300">
-                      <div className="w-1 h-1 rounded-full bg-current shrink-0 opacity-50" />
-                      {f}
+                      <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isMoon ? 'bg-cyan-400 shadow-[0_0_6px_rgba(6,182,212,0.8)]' : 'bg-orange-400 shadow-[0_0_6px_rgba(251,146,60,0.8)]'}`} />
+                      <span>{f}</span>
                     </div>
                   ))}
                 </div>
 
-                <div className={`text-[11px] font-mono font-bold mt-1 ${p.id === 'moon' ? 'text-cyan-400' : 'text-orange-400'
-                  }`}>{p.diff}</div>
-              </button>
-            ))}
-          </div>
-        </FadeIn>
+                {/* Action button */}
+                <div className="pt-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSelect(p.id);
+                    }}
+                    className={`w-full py-2.5 rounded-2xl font-mono font-black text-xs transition-all flex items-center justify-center gap-2 shadow-lg ${
+                      isSelected
+                        ? 'bg-emerald-500 text-white shadow-emerald-500/30'
+                        : isMoon
+                        ? 'bg-linear-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white shadow-cyan-500/25'
+                        : 'bg-linear-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white shadow-orange-500/25'
+                    }`}
+                  >
+                    <span>{isSelected ? 'TRAJECTORY CONFIRMED' : 'ENGAGE MISSION TRAJECTORY'}</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                  <div className={`text-[10px] font-mono text-center mt-1.5 ${isMoon ? 'text-cyan-400' : 'text-orange-400'}`}>
+                    {p.diff}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -539,6 +625,91 @@ function GameHUD({
 
   const co2Bad = resources.co2Level > 2500;
 
+  const [cameraMode, setCameraMode] = useState<'orbit' | 'dome' | 'rover' | 'solar' | 'comms' | 'wide'>('orbit');
+  const [isViewportExpanded, setIsViewportExpanded] = useState(false);
+  const [inspectedObject, setInspectedObject] = useState<string | null>(null);
+  const surveyCounter = useRef(0);
+
+  const dispatchRover = () => {
+    soundFx.playRoverHorn();
+    surveyCounter.current += 1;
+    const isWater = surveyCounter.current % 2 === 0;
+    const bonus = isWater ? 8 : 6;
+    setState(prev => ({
+      ...prev,
+      resources: {
+        ...prev.resources,
+        waterReserve: isWater ? Math.min(prev.resources.waterCapacity, prev.resources.waterReserve + bonus) : prev.resources.waterReserve,
+        regolithStored: !isWater ? prev.resources.regolithStored + bonus : prev.resources.regolithStored,
+      },
+      logs: [{
+        id: `rov${Date.now()}`,
+        sol: prev.currentSol,
+        timeString: `SOL ${prev.currentSol}`,
+        message: `🚜 Rover Survey Expedition Complete: Discovered +${bonus}${isWater ? 'L Ice/Water' : 't Sinterable Regolith'}!`,
+        type: 'success' as const,
+      }, ...prev.logs].slice(0, 30),
+    }));
+  };
+
+  const cycleAirlock = () => {
+    soundFx.playAirlockHiss();
+    setState(prev => ({
+      ...prev,
+      logs: [{
+        id: `air${Date.now()}`,
+        sol: prev.currentSol,
+        timeString: `SOL ${prev.currentSol}`,
+        message: '💨 Habitat airlock depressurization & seal cycle verified (101.3 kPa nominal).',
+        type: 'info' as const,
+      }, ...prev.logs].slice(0, 30),
+    }));
+  };
+
+  const realignSolar = () => {
+    soundFx.playScanner();
+    setState(prev => ({
+      ...prev,
+      logs: [{
+        id: `sol${Date.now()}`,
+        sol: prev.currentSol,
+        timeString: `SOL ${prev.currentSol}`,
+        message: '⚡ Photovoltaic arrays recalibrated: tracking solar elevation vector at 99.4% efficiency.',
+        type: 'info' as const,
+      }, ...prev.logs].slice(0, 30),
+    }));
+  };
+
+  const pingMissionControl = () => {
+    soundFx.playTelemetryPing();
+    setState(prev => ({
+      ...prev,
+      logs: [{
+        id: `ping${Date.now()}`,
+        sol: prev.currentSol,
+        timeString: `SOL ${prev.currentSol}`,
+        message: isMoon
+          ? '📡 Houston Ground Station received packet: Latency 1.28s • Bit Error Rate < 10⁻⁹'
+          : '📡 Deep Space Network Canberra received packet: One-way light time 14m 18s.',
+        type: 'info' as const,
+      }, ...prev.logs].slice(0, 30),
+    }));
+  };
+
+  const saluteCrew = () => {
+    soundFx.playBeep(1100, 0.1);
+    setState(prev => ({
+      ...prev,
+      logs: [{
+        id: `sal${Date.now()}`,
+        sol: prev.currentSol,
+        timeString: `SOL ${prev.currentSol}`,
+        message: '👨‍🚀 EVA Astronaut returned salute: "Base Alpha operational, Commander!"',
+        type: 'success' as const,
+      }, ...prev.logs].slice(0, 30),
+    }));
+  };
+
   const toggleShelter = () => {
     soundFx.playAlarm();
     setState(prev => {
@@ -558,6 +729,7 @@ function GameHUD({
 
   const sinterShield = () => {
     if (resources.regolithStored < 5) return;
+    soundFx.playShieldHum();
     soundFx.playSuccess();
     setState(prev => ({
       ...prev,
@@ -568,7 +740,7 @@ function GameHUD({
       },
       logs: [{
         id: `sh${Date.now()}`, sol: prev.currentSol, timeString: `SOL ${prev.currentSol}`,
-        message: `🪨 Shield +5cm → ${prev.resources.shieldingThicknessCm + 5}cm`, type: 'success' as const
+        message: `🪨 Shield +5cm → ${prev.resources.shieldingThicknessCm + 5}cm (Nanite regolith sintered)`, type: 'success' as const
       }
         , ...prev.logs].slice(0, 30),
     }));
@@ -717,10 +889,10 @@ function GameHUD({
         </div>
 
         {/* ─── CENTER: 3D Outpost ─── */}
-        <div className="flex-1 flex flex-col items-center justify-center relative z-10 p-4 gap-3">
+        <div className="flex-1 flex flex-col items-center justify-center relative z-10 p-3 gap-2 overflow-hidden">
           {/* Active hazard banner */}
           {state.activeHazards[0] && (
-            <div className="w-full max-w-md bg-red-950/90 border border-red-400 rounded-2xl px-4 py-2.5 backdrop-blur-xl flex items-center gap-3 shadow-[0_0_30px_rgba(239,68,68,0.4)] animate-pulse">
+            <div className="w-full max-w-lg bg-red-950/90 border border-red-400 rounded-2xl px-4 py-2 backdrop-blur-xl flex items-center gap-3 shadow-[0_0_30px_rgba(239,68,68,0.4)] animate-pulse shrink-0">
               <span className="text-2xl">{state.activeHazards[0].type === 'solar-flare' ? '☀️' : '🌪️'}</span>
               <div className="flex-1 min-w-0">
                 <div className="text-xs font-black text-red-200 font-mono">{state.activeHazards[0].title}</div>
@@ -732,33 +904,169 @@ function GameHUD({
             </div>
           )}
 
-          {/* Outpost label */}
-          <div className="text-center">
-            <h2 className="text-lg font-black font-mono text-white drop-shadow-lg">
-              {isMoon ? '🌕 ARTEMIS BASE ALPHA' : '🔴 ARES OUTPOST PRIME'}
-            </h2>
-            <div className="text-[11px] text-cyan-400 font-mono">
-              {isMoon ? 'Shackleton Crater, Lunar South Pole' : 'Jezero Crater, Mars'}
+          {/* Outpost Title & Cam Bar */}
+          <div className="flex flex-col items-center gap-1.5 shrink-0">
+            <div className="text-center">
+              <h2 className="text-base sm:text-lg font-black font-mono text-white drop-shadow-lg flex items-center gap-2">
+                <span>{isMoon ? '🌕 ARTEMIS BASE ALPHA' : '🔴 ARES OUTPOST PRIME'}</span>
+                <span className="text-[9px] px-2 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-500/40 text-cyan-300">
+                  {isMoon ? 'Shackleton Crater' : 'Jezero Crater'}
+                </span>
+              </h2>
+            </div>
+
+            {/* Interactive 3D Camera Controls Bar */}
+            <div className="flex items-center gap-1 p-1 bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-700/60 shadow-lg text-[10px] font-mono">
+              <span className="text-[9px] text-cyan-400 font-bold px-1.5 uppercase tracking-wider hidden sm:inline">VIEW:</span>
+              {[
+                { id: 'orbit', label: '🌐 Orbit' },
+                { id: 'dome', label: '🏠 Habitat' },
+                { id: 'rover', label: '🚜 Rover' },
+                { id: 'solar', label: '⚡ Solar' },
+                { id: 'comms', label: '📡 Comms' },
+                { id: 'wide', label: '🌌 Wide' },
+              ].map((cam) => (
+                <button
+                  key={cam.id}
+                  onClick={() => {
+                    soundFx.playClick();
+                    setCameraMode(cam.id as typeof cameraMode);
+                  }}
+                  className={`px-2 py-1 rounded-xl transition-all ${
+                    cameraMode === cam.id
+                      ? 'bg-cyan-500/30 text-cyan-200 border border-cyan-400/50 shadow-[0_0_8px_rgba(6,182,212,0.3)] font-bold'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                  }`}
+                >
+                  {cam.label}
+                </button>
+              ))}
+              <div className="h-4 w-px bg-slate-700/60 mx-1" />
+              <button
+                onClick={() => {
+                  soundFx.playClick();
+                  setIsViewportExpanded(prev => !prev);
+                }}
+                className="px-2.5 py-1 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-cyan-300 border border-slate-700 transition-all font-bold"
+              >
+                {isViewportExpanded ? '⊟ Normal' : '⛶ Expand'}
+              </button>
             </div>
           </div>
 
-          {/* 3D Outpost */}
-          <div className="relative w-64 h-64 sm:w-80 sm:h-80">
-            <div className="absolute inset-0 rounded-3xl overflow-hidden border border-cyan-500/25 bg-slate-950/30 backdrop-blur-sm shadow-[0_0_40px_rgba(6,182,212,0.15)]">
-              <Suspense fallback={
-                <div className="w-full h-full flex items-center justify-center">
-                  <div className="text-5xl animate-spin">🚀</div>
-                </div>
-              }>
-                <MiniOutpostScene health={state.sustainabilityScore} isMars={!isMoon} />
+          {/* 3D Outpost Viewport */}
+          <div
+            className={`relative transition-all duration-500 ease-out ${
+              isViewportExpanded
+                ? 'w-full max-w-4xl h-[420px] sm:h-[480px] z-30'
+                : 'w-72 h-72 sm:w-96 sm:h-96'
+            }`}
+          >
+            <div className="absolute inset-0 rounded-3xl overflow-hidden border border-cyan-500/30 bg-slate-950/40 backdrop-blur-sm shadow-[0_0_50px_rgba(6,182,212,0.2)]">
+              <Suspense
+                fallback={
+                  <div className="w-full h-full flex items-center justify-center">
+                    <div className="text-5xl animate-spin">🚀</div>
+                  </div>
+                }
+              >
+                <MiniOutpostScene
+                  health={state.sustainabilityScore}
+                  isMars={!isMoon}
+                  activeHazard={state.activeHazards[0]?.type || null}
+                  shieldActive={resources.stormShelterActive}
+                  shieldThickness={resources.shieldingThicknessCm}
+                  cameraMode={cameraMode}
+                  onInspect={(obj) => {
+                    setInspectedObject(obj);
+                    if (obj === 'rover') setCameraMode('rover');
+                    else if (obj === 'dome') setCameraMode('dome');
+                    else if (obj === 'solar') setCameraMode('solar');
+                    else if (obj === 'antenna') setCameraMode('comms');
+                  }}
+                />
               </Suspense>
+
+              {/* In-viewport subtle user guide hint */}
+              <div className="absolute bottom-2 left-3 text-[9px] font-mono text-slate-400 bg-slate-950/70 px-2 py-0.5 rounded-full border border-slate-800/80 pointer-events-none">
+                💡 Drag to rotate • Scroll to zoom • Click 3D objects
+              </div>
             </div>
-            {/* Orbit ring */}
-            <div className="absolute -inset-6 rounded-full border border-cyan-500/10 pointer-events-none" />
+
+            {/* Orbit rings decorative */}
+            <div className="absolute -inset-4 rounded-full border border-cyan-500/10 pointer-events-none" />
           </div>
+
+          {/* Interactive 3D Object Inspection Telemetry Card */}
+          {inspectedObject && (
+            <div className="w-full max-w-md bg-slate-900/90 border border-cyan-500/50 rounded-2xl p-3 backdrop-blur-xl shadow-[0_0_30px_rgba(6,182,212,0.25)] flex items-center justify-between gap-3 animate-in fade-in zoom-in-95 duration-200">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">
+                  {inspectedObject === 'rover' ? '🚜' : inspectedObject === 'dome' ? '🏠' : inspectedObject === 'solar' ? '⚡' : inspectedObject === 'antenna' ? '📡' : '👨‍🚀'}
+                </span>
+                <div>
+                  <div className="text-xs font-black font-mono text-white uppercase">
+                    {inspectedObject === 'rover' ? 'Surface Patrol Rover' : inspectedObject === 'dome' ? 'Pressurized Habitation Dome' : inspectedObject === 'solar' ? 'Ultraflex Solar Array' : inspectedObject === 'antenna' ? 'High-Gain Deep Space Antenna' : 'Surface EVA Astronaut'}
+                  </div>
+                  <div className="text-[10px] font-mono text-cyan-400">
+                    {inspectedObject === 'rover' ? 'Telemetry: Patrol Route Active • 100% Battery' : inspectedObject === 'dome' ? `Internal: 101.3 kPa • O₂ ${resources.o2PartialPressure.toFixed(1)}%` : inspectedObject === 'solar' ? `Generating: +${resources.powerGeneration.toFixed(1)}kW clean power` : inspectedObject === 'antenna' ? (isMoon ? 'Earth direct line: 1.3s delay' : 'DSN relay: 14.2m delay') : 'Suit O₂ 95% • Pressure Nominal'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                {inspectedObject === 'rover' && (
+                  <button
+                    onClick={dispatchRover}
+                    className="px-3 py-1.5 rounded-xl bg-linear-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white text-[10px] font-mono font-black shadow-md transition-all"
+                  >
+                    DISPATCH SURVEY
+                  </button>
+                )}
+                {inspectedObject === 'dome' && (
+                  <button
+                    onClick={cycleAirlock}
+                    className="px-3 py-1.5 rounded-xl bg-cyan-700 hover:bg-cyan-600 text-white text-[10px] font-mono font-black shadow-md transition-all"
+                  >
+                    TEST AIRLOCK
+                  </button>
+                )}
+                {inspectedObject === 'solar' && (
+                  <button
+                    onClick={realignSolar}
+                    className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-mono font-black shadow-md transition-all"
+                  >
+                    REALIGN CELLS
+                  </button>
+                )}
+                {inspectedObject === 'antenna' && (
+                  <button
+                    onClick={pingMissionControl}
+                    className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-mono font-black shadow-md transition-all"
+                  >
+                    PING EARTH
+                  </button>
+                )}
+                {inspectedObject === 'crew' && (
+                  <button
+                    onClick={saluteCrew}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-mono font-black shadow-md transition-all"
+                  >
+                    SALUTE
+                  </button>
+                )}
+                <button
+                  onClick={() => setInspectedObject(null)}
+                  className="w-7 h-7 flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Log ticker */}
-          <div className="w-full max-w-md bg-slate-900/60 border border-slate-700/40 rounded-xl backdrop-blur-sm">
+          <div className="w-full max-w-md bg-slate-900/60 border border-slate-700/40 rounded-xl backdrop-blur-sm shrink-0">
             <LogTicker logs={state.logs} />
           </div>
         </div>

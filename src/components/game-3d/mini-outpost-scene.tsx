@@ -1,9 +1,30 @@
 'use client';
 
-import React, { useRef, useMemo } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import React, { useRef, useMemo, useState } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Stars, OrbitControls } from '@react-three/drei';
+import type { OrbitControls as OrbitControlsType } from 'three-stdlib';
 import * as THREE from 'three';
+import { soundFx } from '../../audio/sound-synthesizer';
+
+// ── Pre-computed static arrays for ESLint purity ─────────────
+const DUST_COUNT = 70;
+const DUST_DATA = Array.from({ length: DUST_COUNT }, (_, i) => ({
+  seed: i,
+  radius: 1.2 + (i % 25) * 0.12,
+  angle: (i / DUST_COUNT) * Math.PI * 2,
+  height: 0.05 + ((i * 7) % 30) * 0.05,
+  speed: 0.4 + ((i * 3) % 10) * 0.1,
+  size: 0.02 + ((i * 5) % 6) * 0.008,
+}));
+
+const HAZARD_PARTICLES = Array.from({ length: 100 }, (_, i) => ({
+  angle: (i / 100) * Math.PI * 2,
+  dist: 0.6 + ((i * 13) % 30) * 0.1,
+  height: 0.1 + ((i * 9) % 25) * 0.08,
+  speed: 1.2 + ((i * 5) % 8) * 0.3,
+  size: 0.025 + ((i * 3) % 5) * 0.008,
+}));
 
 // ── Procedural texture generators ────────────────────────────
 
@@ -17,49 +38,44 @@ function makeRegolithTexture(isMars: boolean) {
   ctx.fillStyle = base;
   ctx.fillRect(0, 0, size, size);
 
-  // Noise layers
-  for (let i = 0; i < 3000; i++) {
-    const x = Math.random() * size;
-    const y = Math.random() * size;
-    const r = Math.random() * 3 + 0.5;
-    const alpha = Math.random() * 0.3 + 0.05;
-    const dark = Math.random() > 0.5;
+  // Deterministic noise layers
+  for (let i = 0; i < 2500; i++) {
+    const x = ((i * 167) % size);
+    const y = ((i * 313) % size);
+    const r = (i % 4) * 0.8 + 0.6;
+    const dark = i % 2 === 0;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fillStyle = dark
-      ? `rgba(0,0,0,${alpha})`
-      : `rgba(255,180,120,${alpha * (isMars ? 0.7 : 0.3)})`;
+      ? 'rgba(0,0,0,0.18)'
+      : `rgba(255,180,120,${isMars ? 0.22 : 0.08})`;
     ctx.fill();
   }
 
-  // Small crater depressions
-  for (let i = 0; i < 15; i++) {
-    const x = Math.random() * size;
-    const y = Math.random() * size;
-    const r = Math.random() * 20 + 5;
+  // Craters
+  for (let i = 0; i < 12; i++) {
+    const x = ((i * 191 + 50) % (size - 60)) + 30;
+    const y = ((i * 241 + 40) % (size - 60)) + 30;
+    const r = (i % 5) * 4 + 10;
     const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
-    grad.addColorStop(0, 'rgba(0,0,0,0.4)');
-    grad.addColorStop(0.7, 'rgba(0,0,0,0.1)');
-    grad.addColorStop(1, 'rgba(255,255,255,0.05)');
+    grad.addColorStop(0, 'rgba(0,0,0,0.45)');
+    grad.addColorStop(0.7, 'rgba(0,0,0,0.15)');
+    grad.addColorStop(1, 'rgba(255,255,255,0.06)');
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fillStyle = grad;
     ctx.fill();
   }
 
-  // Rover track lines
-  ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+  // Rover track path lines
+  ctx.strokeStyle = 'rgba(0,0,0,0.28)';
   ctx.lineWidth = 4;
-  ctx.setLineDash([6, 3]);
+  ctx.setLineDash([8, 4]);
   ctx.beginPath();
-  ctx.moveTo(300, 400);
-  ctx.lineTo(400, 300);
-  ctx.lineTo(450, 200);
+  ctx.arc(size / 2, size / 2, 170, 0, Math.PI * 1.5);
   ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(312, 400);
-  ctx.lineTo(412, 300);
-  ctx.lineTo(462, 200);
+  ctx.arc(size / 2, size / 2, 185, 0, Math.PI * 1.5);
   ctx.stroke();
   ctx.setLineDash([]);
 
@@ -71,18 +87,17 @@ function makeRegolithNormalMap() {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext('2d')!;
-  // Base neutral normal (128,128,255)
   ctx.fillStyle = 'rgb(128,128,255)';
   ctx.fillRect(0, 0, size, size);
-  // Random bumps in R/G channels
-  for (let i = 0; i < 600; i++) {
-    const x = Math.random() * size;
-    const y = Math.random() * size;
-    const r = Math.random() * 8 + 2;
-    const dx = (Math.random() - 0.5) * 60 + 128;
-    const dy = (Math.random() - 0.5) * 60 + 128;
+
+  for (let i = 0; i < 400; i++) {
+    const x = (i * 127) % size;
+    const y = (i * 179) % size;
+    const r = (i % 6) + 2;
+    const dx = ((i * 31) % 60) - 30 + 128;
+    const dy = ((i * 47) % 60) - 30 + 128;
     const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
-    grad.addColorStop(0, `rgba(${dx|0},${dy|0},255,0.6)`);
+    grad.addColorStop(0, `rgba(${dx | 0},${dy | 0},255,0.6)`);
     grad.addColorStop(1, 'rgba(128,128,255,0)');
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -101,55 +116,29 @@ function makeSolarCellTexture() {
   canvas.width = w; canvas.height = h;
   const ctx = canvas.getContext('2d')!;
 
-  // Background deep blue
-  ctx.fillStyle = '#0f172a';
+  ctx.fillStyle = '#0a1020';
   ctx.fillRect(0, 0, w, h);
 
-  // Cell grid
   const cols = 12; const rows = 6;
   const pw = w / cols; const ph = h / rows;
   for (let c = 0; c < cols; c++) {
     for (let r = 0; r < rows; r++) {
       const x = c * pw; const y = r * ph;
-      // Cell body
       const cellGrad = ctx.createLinearGradient(x, y, x + pw, y + ph);
       cellGrad.addColorStop(0, '#1e3a8a');
-      cellGrad.addColorStop(0.4, '#1d4ed8');
+      cellGrad.addColorStop(0.4, '#2563eb');
       cellGrad.addColorStop(1, '#1e3a8a');
       ctx.fillStyle = cellGrad;
       ctx.fillRect(x + 1.5, y + 1.5, pw - 3, ph - 3);
 
-      // Metallic bus-bar cross lines
-      ctx.strokeStyle = 'rgba(148,163,184,0.4)';
+      ctx.strokeStyle = 'rgba(191,219,254,0.4)';
       ctx.lineWidth = 0.8;
       ctx.beginPath();
       ctx.moveTo(x + pw / 2, y + 1);
       ctx.lineTo(x + pw / 2, y + ph - 1);
       ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(x + 1, y + ph / 2);
-      ctx.lineTo(x + pw - 1, y + ph / 2);
-      ctx.stroke();
     }
   }
-
-  // Grid border lines
-  ctx.strokeStyle = 'rgba(30,58,138,0.9)';
-  ctx.lineWidth = 1.5;
-  for (let c = 0; c <= cols; c++) {
-    ctx.beginPath(); ctx.moveTo(c * pw, 0); ctx.lineTo(c * pw, h); ctx.stroke();
-  }
-  for (let r = 0; r <= rows; r++) {
-    ctx.beginPath(); ctx.moveTo(0, r * ph); ctx.lineTo(w, r * ph); ctx.stroke();
-  }
-
-  // Reflection sheen
-  const sheen = ctx.createLinearGradient(0, 0, w, h);
-  sheen.addColorStop(0, 'rgba(255,255,255,0.07)');
-  sheen.addColorStop(0.5, 'rgba(255,255,255,0.0)');
-  sheen.addColorStop(1, 'rgba(255,255,255,0.04)');
-  ctx.fillStyle = sheen;
-  ctx.fillRect(0, 0, w, h);
 
   return new THREE.CanvasTexture(canvas);
 }
@@ -162,27 +151,15 @@ function makeMetalTexture(base: string) {
   ctx.fillStyle = base;
   ctx.fillRect(0, 0, size, size);
 
-  // Brushed-metal streaks
-  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-  for (let i = 0; i < 80; i++) {
-    const y = Math.random() * size;
-    ctx.lineWidth = Math.random() * 1.5;
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  for (let i = 0; i < 60; i++) {
+    const y = (i * 23) % size;
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(0, y);
-    ctx.lineTo(size, y + (Math.random() - 0.5) * 4);
+    ctx.lineTo(size, y + 1);
     ctx.stroke();
   }
-
-  // Scratch marks
-  ctx.strokeStyle = 'rgba(0,0,0,0.1)';
-  for (let i = 0; i < 20; i++) {
-    ctx.lineWidth = 0.5;
-    const x1 = Math.random() * size; const y1 = Math.random() * size;
-    ctx.beginPath(); ctx.moveTo(x1, y1);
-    ctx.lineTo(x1 + (Math.random() - 0.5) * 40, y1 + (Math.random() - 0.5) * 40);
-    ctx.stroke();
-  }
-
   return new THREE.CanvasTexture(canvas);
 }
 
@@ -194,7 +171,6 @@ function makeDomeTexture() {
   ctx.fillStyle = '#0f172a';
   ctx.fillRect(0, 0, size, size);
 
-  // Hexagonal panel grid pattern
   const hex = (cx: number, cy: number, r: number) => {
     ctx.beginPath();
     for (let i = 0; i < 6; i++) {
@@ -205,7 +181,7 @@ function makeDomeTexture() {
     }
     ctx.closePath();
   };
-  const R = 40;
+  const R = 36;
   const hexW = R * Math.sqrt(3);
   const hexH = R * 2;
   for (let row = -1; row < size / hexH + 1; row++) {
@@ -213,573 +189,1111 @@ function makeDomeTexture() {
       const cx = col * hexW + (row % 2) * hexW / 2;
       const cy = row * hexH * 0.75;
       hex(cx, cy, R - 2);
-      ctx.fillStyle = `rgba(15,23,42,${0.8 + Math.random() * 0.15})`;
+      ctx.fillStyle = '#1e293b';
       ctx.fill();
-      ctx.strokeStyle = 'rgba(6,182,212,0.25)';
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(6,182,212,0.35)';
+      ctx.lineWidth = 1.2;
       ctx.stroke();
     }
   }
-
-  // Reflection arc
-  const arc = ctx.createRadialGradient(size * 0.3, size * 0.2, 0, size / 2, size / 2, size * 0.6);
-  arc.addColorStop(0, 'rgba(255,255,255,0.08)');
-  arc.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = arc;
-  ctx.fillRect(0, 0, size, size);
-
   return new THREE.CanvasTexture(canvas);
 }
 
-// ── Ground with regolith ──────────────────────────────────────
-function Ground({ isMars }: { isMars: boolean }) {
-  const textures = useMemo(() => ({
-    color: makeRegolithTexture(isMars),
-    normal: makeRegolithNormalMap(),
-  }), [isMars]);
-
-  return (
-    <>
-      {/* Main ground disk */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.18, 0]} receiveShadow>
-        <circleGeometry args={[3.0, 128]} />
-        <meshStandardMaterial
-          map={textures.color}
-          normalMap={textures.normal}
-          normalScale={new THREE.Vector2(1.2, 1.2)}
-          roughness={0.97}
-          metalness={0}
-        />
-      </mesh>
-
-      {/* Berm ring */}
-      <mesh position={[0, -0.14, 0]}>
-        <torusGeometry args={[2.5, 0.15, 8, 96]} />
-        <meshStandardMaterial
-          color={isMars ? '#6b1d0a' : '#1f2937'}
-          roughness={1}
-          metalness={0}
-        />
-      </mesh>
-
-      {/* Flat foundation pad under dome */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.16, 0]}>
-        <circleGeometry args={[0.7, 32]} />
-        <meshStandardMaterial color={isMars ? '#451a08' : '#111827'} roughness={0.9} />
-      </mesh>
-    </>
-  );
-}
-
-// ── Habitat Dome ──────────────────────────────────────────────
-function HabitatDome({ health: _health, isMars }: { health: number; isMars: boolean }) {
-  const innerRef = useRef<THREE.PointLight>(null);
-  const domeTexture = useMemo(() => makeDomeTexture(), []);
-  const metalTex = useMemo(() => makeMetalTexture('#374151'), []);
+// ── 3D Holographic Pin Marker ────────────────────────────────
+function HoloPin({
+  position,
+  label: _label,
+  icon: _icon,
+  color = '#06b6d4',
+  onClick,
+}: {
+  position: [number, number, number];
+  label: string;
+  icon: string;
+  color?: string;
+  onClick?: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const ringRef = useRef<THREE.Mesh>(null);
+  const coreRef = useRef<THREE.Mesh>(null);
 
   useFrame((state) => {
-    if (!innerRef.current) return;
-    innerRef.current.intensity = 0.5 + 0.1 * Math.sin(state.clock.getElapsedTime() * 0.8);
+    const t = state.clock.getElapsedTime();
+    if (ringRef.current) {
+      ringRef.current.rotation.z = t * 1.5;
+      const s = 1 + Math.sin(t * 3) * 0.08;
+      ringRef.current.scale.set(s, s, s);
+    }
+    if (coreRef.current) {
+      coreRef.current.rotation.y = t * 2.0;
+      coreRef.current.position.y = position[1] + Math.sin(t * 2.5) * 0.04;
+    }
   });
 
   return (
-    <group>
-      {/* Concrete foundation ring */}
-      <mesh position={[0, -0.1, 0]}>
-        <cylinderGeometry args={[0.6, 0.65, 0.12, 32]} />
-        <meshStandardMaterial map={metalTex} roughness={0.8} metalness={0.5} />
+    <group
+      position={position}
+      onClick={(e) => {
+        e.stopPropagation();
+        soundFx.playBeep(1200);
+        onClick?.();
+      }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHovered(true);
+        document.body.style.cursor = 'pointer';
+      }}
+      onPointerOut={() => {
+        setHovered(false);
+        document.body.style.cursor = 'default';
+      }}
+    >
+      {/* Vertical laser beacon beam */}
+      <mesh position={[0, -0.2, 0]}>
+        <cylinderGeometry args={[0.005, 0.012, 0.4, 8]} />
+        <meshBasicMaterial color={color} transparent opacity={hovered ? 0.8 : 0.4} />
       </mesh>
 
-      {/* Outer pressure shell – textured hex panels */}
-      <mesh position={[0, 0.07, 0]} castShadow>
-        <sphereGeometry args={[0.58, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2]} />
-        <meshStandardMaterial
-          map={domeTexture}
-          roughness={0.25}
-          metalness={0.55}
-          envMapIntensity={0.8}
-        />
+      {/* Rotating holo ring */}
+      <mesh ref={ringRef} rotation={[Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.07, 0.09, 24]} />
+        <meshBasicMaterial color={color} transparent opacity={hovered ? 0.95 : 0.6} side={THREE.DoubleSide} />
       </mesh>
 
-      {/* Inner glass tint layer */}
-      <mesh position={[0, 0.07, 0]}>
-        <sphereGeometry args={[0.56, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
-        <meshStandardMaterial
-          color={isMars ? '#7c2d12' : '#0c1a33'}
-          transparent
-          opacity={0.22}
-          metalness={0.1}
-          roughness={0.0}
-          side={THREE.BackSide}
-        />
+      {/* Floating diamond core */}
+      <mesh ref={coreRef} position={[0, 0.06, 0]}>
+        <octahedronGeometry args={[0.045, 0]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={hovered ? 2.5 : 1.2} />
       </mesh>
 
-      {/* Airlock vestibule cylinder */}
-      <mesh position={[0.55, -0.05, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.12, 0.12, 0.22, 16]} />
-        <meshStandardMaterial map={metalTex} roughness={0.4} metalness={0.75} />
-      </mesh>
+      {/* Light glow */}
+      <pointLight color={color} intensity={hovered ? 0.8 : 0.3} distance={0.6} />
 
-      {/* Airlock door circle */}
-      <mesh position={[0.67, -0.05, 0]} rotation={[0, Math.PI / 2, 0]}>
-        <circleGeometry args={[0.1, 16]} />
-        <meshStandardMaterial color="#374151" roughness={0.5} metalness={0.8} />
-      </mesh>
-
-      {/* Airlock door bolts */}
-      {[0, 1, 2, 3, 4, 5].map((i) => {
-        const a = (i / 6) * Math.PI * 2;
-        return (
-          <mesh key={i} position={[0.672, -0.05 + Math.sin(a) * 0.08, Math.cos(a) * 0.08]} rotation={[0, Math.PI / 2, 0]}>
-            <circleGeometry args={[0.008, 8]} />
-            <meshStandardMaterial color="#6b7280" metalness={0.9} />
+      {/* Floating HTML label tool tip on hover */}
+      {hovered && (
+        <group position={[0, 0.22, 0]}>
+          <mesh>
+            <planeGeometry args={[0.36, 0.12]} />
+            <meshBasicMaterial color="#020617" transparent opacity={0.85} side={THREE.DoubleSide} />
           </mesh>
-        );
-      })}
-
-      {/* Neon cyan seal ring */}
-      <mesh position={[0, 0.08, 0]}>
-        <torusGeometry args={[0.585, 0.022, 12, 80]} />
-        <meshStandardMaterial color="#06b6d4" emissive="#06b6d4" emissiveIntensity={2.0} metalness={0.9} />
-      </mesh>
-
-      {/* Pressurization pipes around base */}
-      {[0, 1, 2, 3].map((i) => {
-        const angle = (i / 4) * Math.PI * 2 + Math.PI / 8;
-        const x = Math.cos(angle) * 0.6;
-        const z = Math.sin(angle) * 0.6;
-        return (
-          <mesh key={i} position={[x, -0.09, z]} rotation={[0, -angle, 0]}>
-            <cylinderGeometry args={[0.018, 0.018, 0.12, 8]} />
-            <meshStandardMaterial color="#9ca3af" metalness={0.9} roughness={0.2} />
-          </mesh>
-        );
-      })}
-
-      {/* Interior warm glow */}
-      <pointLight ref={innerRef} position={[0, 0.1, 0]} intensity={0.5} color="#fde68a" distance={0.9} />
-    </group>
-  );
-}
-
-// ── Solar Panel ────────────────────────────────────────────────
-function SolarPanel({ side, isMars }: { side: -1 | 1; isMars: boolean }) {
-  const panelRef = useRef<THREE.Group>(null);
-  const cellTex = useMemo(() => makeSolarCellTexture(), []);
-  const metalTex = useMemo(() => makeMetalTexture('#4b5563'), []);
-
-  useFrame((state) => {
-    if (!panelRef.current) return;
-    panelRef.current.rotation.z = side * 0.03 * Math.sin(state.clock.getElapsedTime() * 0.5);
-  });
-
-  return (
-    <group ref={panelRef} position={[side * 1.05, 0.12, 0.05]}>
-      {/* Vertical mast */}
-      <mesh position={[0, -0.06, 0]}>
-        <cylinderGeometry args={[0.02, 0.02, 0.28, 10]} />
-        <meshStandardMaterial map={metalTex} metalness={0.85} roughness={0.25} />
-      </mesh>
-
-      {/* Horizontal boom */}
-      <mesh position={[0, 0.09, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.013, 0.013, 0.82, 8]} />
-        <meshStandardMaterial map={metalTex} metalness={0.85} roughness={0.3} />
-      </mesh>
-
-      {/* Two panel arrays left and right of boom */}
-      {([-0.28, 0.28] as const).map((offset, pi) => (
-        <group key={pi} position={[offset, 0.09, 0]}>
-          {/* Front panel */}
-          <mesh rotation={[0.12, 0, 0]} castShadow>
-            <boxGeometry args={[0.42, 0.02, 0.24]} />
-            <meshStandardMaterial
-              map={cellTex}
-              metalness={0.6}
-              roughness={0.15}
-              emissive={isMars ? '#0c1550' : '#1e3a8a'}
-              emissiveIntensity={isMars ? 0.15 : 0.3}
-            />
-          </mesh>
-
-          {/* Back panel (anodised silver) */}
-          <mesh rotation={[0.12, 0, 0]} position={[0, -0.021, 0]}>
-            <boxGeometry args={[0.42, 0.005, 0.24]} />
-            <meshStandardMaterial map={metalTex} metalness={0.8} roughness={0.3} />
-          </mesh>
-
-          {/* Frame rail top */}
-          <mesh rotation={[0.12, 0, 0]} position={[0, 0.015, -0.12]}>
-            <boxGeometry args={[0.42, 0.018, 0.012]} />
-            <meshStandardMaterial color="#6b7280" metalness={0.9} roughness={0.2} />
-          </mesh>
-
-          {/* Frame rail bottom */}
-          <mesh rotation={[0.12, 0, 0]} position={[0, 0.015, 0.12]}>
-            <boxGeometry args={[0.42, 0.018, 0.012]} />
-            <meshStandardMaterial color="#6b7280" metalness={0.9} roughness={0.2} />
+          <mesh position={[0, 0, 0.002]}>
+            <planeGeometry args={[0.34, 0.1]} />
+            <meshBasicMaterial color={color} transparent opacity={0.2} side={THREE.DoubleSide} />
           </mesh>
         </group>
-      ))}
+      )}
     </group>
   );
 }
 
-// ── Antenna Assembly ──────────────────────────────────────────
-function Antenna({ isMars }: { isMars: boolean }) {
-  const dishRef = useRef<THREE.Group>(null);
-  const metalTex = useMemo(() => makeMetalTexture('#6b7280'), []);
+// ── Interactive Animated Astronaut ────────────────────────────
+function AstronautCharacter({
+  isMars,
+  onClick,
+}: {
+  isMars: boolean;
+  onClick?: () => void;
+}) {
+  const groupRef = useRef<THREE.Group>(null);
+  const leftLegRef = useRef<THREE.Mesh>(null);
+  const rightLegRef = useRef<THREE.Mesh>(null);
+  const rightArmRef = useRef<THREE.Group>(null);
+  const [waving, setWaving] = useState(false);
+  const [hovered, setHovered] = useState(false);
 
   useFrame((state) => {
-    if (!dishRef.current) return;
-    dishRef.current.rotation.y = state.clock.getElapsedTime() * 0.35;
+    const t = state.clock.getElapsedTime();
+    if (!groupRef.current) return;
+
+    // Gentle low-gravity moon bounce / patrol walk between airlock and rover
+    const walkCycle = Math.sin(t * 1.8);
+    const posX = 0.55 + Math.sin(t * 0.4) * 0.2;
+    const posZ = 0.25 + Math.cos(t * 0.4) * 0.15;
+    groupRef.current.position.x = posX;
+    groupRef.current.position.z = posZ;
+    groupRef.current.position.y = -0.11 + Math.abs(Math.sin(t * 1.8)) * 0.035;
+    groupRef.current.rotation.y = -Math.atan2(Math.cos(t * 0.4) * 0.15, Math.sin(t * 0.4) * 0.2) + Math.PI / 2;
+
+    if (leftLegRef.current && rightLegRef.current) {
+      leftLegRef.current.rotation.x = walkCycle * 0.35;
+      rightLegRef.current.rotation.x = -walkCycle * 0.35;
+    }
+
+    if (rightArmRef.current) {
+      if (waving) {
+        rightArmRef.current.rotation.z = -1.6 + Math.sin(t * 12) * 0.4;
+      } else {
+        rightArmRef.current.rotation.x = -walkCycle * 0.3;
+        rightArmRef.current.rotation.z = -0.2;
+      }
+    }
   });
 
+  const handleClick = (e: { stopPropagation: () => void }) => {
+    e.stopPropagation();
+    soundFx.playBeep(980, 0.12);
+    setWaving(true);
+    setTimeout(() => setWaving(false), 2200);
+    onClick?.();
+  };
+
   return (
-    <group position={[0.18, 0, -0.42]}>
-      {/* Foundation pad */}
-      <mesh position={[0, -0.14, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[0.08, 12]} />
-        <meshStandardMaterial color="#374151" roughness={0.9} />
+    <group
+      ref={groupRef}
+      position={[0.55, -0.11, 0.25]}
+      scale={0.8}
+      onClick={handleClick}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHovered(true);
+        document.body.style.cursor = 'pointer';
+      }}
+      onPointerOut={() => {
+        setHovered(false);
+        document.body.style.cursor = 'default';
+      }}
+    >
+      {/* Torso / Suit */}
+      <mesh position={[0, 0.15, 0]} castShadow>
+        <boxGeometry args={[0.09, 0.12, 0.06]} />
+        <meshStandardMaterial color="#f8fafc" roughness={0.5} metalness={0.1} />
       </mesh>
 
-      {/* Main mast */}
-      <mesh position={[0, 0.24, 0]}>
-        <cylinderGeometry args={[0.014, 0.018, 0.72, 10]} />
-        <meshStandardMaterial map={metalTex} metalness={0.9} roughness={0.2} />
+      {/* Chest pack / life support controls */}
+      <mesh position={[0, 0.16, 0.033]}>
+        <boxGeometry args={[0.06, 0.06, 0.015]} />
+        <meshStandardMaterial color="#1e293b" metalness={0.8} roughness={0.3} />
+      </mesh>
+      {/* Chest LED status */}
+      <mesh position={[-0.015, 0.17, 0.042]}>
+        <sphereGeometry args={[0.005, 6, 6]} />
+        <meshBasicMaterial color={isMars ? '#f97316' : '#10b981'} />
+      </mesh>
+      <mesh position={[0.015, 0.17, 0.042]}>
+        <sphereGeometry args={[0.005, 6, 6]} />
+        <meshBasicMaterial color="#06b6d4" />
       </mesh>
 
-      {/* Strut braces */}
-      {[0, 1, 2].map((i) => {
-        const a = (i / 3) * Math.PI * 2;
-        return (
-          <mesh key={i} position={[Math.cos(a) * 0.04, 0.0, Math.sin(a) * 0.04]} rotation={[Math.sin(a) * 0.4, 0, -Math.cos(a) * 0.4]}>
-            <cylinderGeometry args={[0.006, 0.006, 0.24, 6]} />
-            <meshStandardMaterial map={metalTex} metalness={0.8} roughness={0.3} />
-          </mesh>
-        );
-      })}
+      {/* PLSS Backpack */}
+      <mesh position={[0, 0.16, -0.042]} castShadow>
+        <boxGeometry args={[0.08, 0.13, 0.045]} />
+        <meshStandardMaterial color="#e2e8f0" roughness={0.4} metalness={0.2} />
+      </mesh>
+      {/* O2 tank caps */}
+      <mesh position={[-0.025, 0.23, -0.042]}>
+        <cylinderGeometry args={[0.01, 0.01, 0.02, 8]} />
+        <meshStandardMaterial color="#3b82f6" metalness={0.8} />
+      </mesh>
+      <mesh position={[0.025, 0.23, -0.042]}>
+        <cylinderGeometry args={[0.01, 0.01, 0.02, 8]} />
+        <meshStandardMaterial color="#3b82f6" metalness={0.8} />
+      </mesh>
 
-      {/* Dish assembly */}
-      <group ref={dishRef} position={[0, 0.62, 0]} rotation={[0.45, 0, 0]}>
-        {/* Dish bowl */}
-        <mesh>
-          <sphereGeometry args={[0.12, 24, 24, 0, Math.PI * 2, 0, Math.PI / 1.8]} />
-          <meshStandardMaterial map={metalTex} metalness={0.9} roughness={0.15} side={THREE.DoubleSide} />
+      {/* Helmet sphere */}
+      <mesh position={[0, 0.25, 0]} castShadow>
+        <sphereGeometry args={[0.05, 16, 16]} />
+        <meshStandardMaterial color="#f8fafc" roughness={0.3} metalness={0.1} />
+      </mesh>
+      {/* Gold reflective solar visor */}
+      <mesh position={[0, 0.25, 0.025]} rotation={[0.1, 0, 0]}>
+        <sphereGeometry args={[0.04, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2.2]} />
+        <meshStandardMaterial
+          color="#f59e0b"
+          metalness={0.96}
+          roughness={0.06}
+          emissive="#d97706"
+          emissiveIntensity={hovered ? 0.8 : 0.3}
+        />
+      </mesh>
+
+      {/* Left arm */}
+      <mesh position={[-0.065, 0.14, 0]}>
+        <boxGeometry args={[0.03, 0.1, 0.03]} />
+        <meshStandardMaterial color="#f8fafc" roughness={0.5} />
+      </mesh>
+
+      {/* Right arm (waving / tool arm) */}
+      <group ref={rightArmRef} position={[0.065, 0.19, 0]}>
+        <mesh position={[0, -0.05, 0]}>
+          <boxGeometry args={[0.03, 0.1, 0.03]} />
+          <meshStandardMaterial color="#f8fafc" roughness={0.5} />
         </mesh>
-
-        {/* Focal point feed */}
-        <mesh position={[0, 0.07, 0]}>
-          <cylinderGeometry args={[0.015, 0.02, 0.05, 8]} />
-          <meshStandardMaterial color="#1f2937" metalness={0.95} roughness={0.1} />
+        {/* Handheld scientific scanner */}
+        <mesh position={[0, -0.1, 0.03]} rotation={[0.4, 0, 0]}>
+          <boxGeometry args={[0.02, 0.04, 0.03]} />
+          <meshStandardMaterial color="#0f172a" metalness={0.8} />
         </mesh>
-
-        {/* Feed arm */}
-        <mesh position={[0, 0.04, 0]} rotation={[0.45, 0, 0]}>
-          <cylinderGeometry args={[0.004, 0.004, 0.12, 6]} />
-          <meshStandardMaterial color="#94a3b8" metalness={0.9} roughness={0.2} />
+        <mesh position={[0, -0.11, 0.045]}>
+          <coneGeometry args={[0.01, 0.02, 8]} />
+          <meshBasicMaterial color="#06b6d4" />
         </mesh>
-
-        {/* Status beacon glow */}
-        <pointLight position={[0, 0.08, 0]} intensity={0.35} color={isMars ? '#f97316' : '#06b6d4'} distance={0.4} />
       </group>
 
-      {/* Blinking indicator */}
-      <mesh position={[0, 0.64, 0]}>
-        <sphereGeometry args={[0.018, 8, 8]} />
-        <meshStandardMaterial
-          color={isMars ? '#f97316' : '#06b6d4'}
-          emissive={isMars ? '#f97316' : '#06b6d4'}
-          emissiveIntensity={1.5}
-        />
+      {/* Legs */}
+      <mesh ref={leftLegRef} position={[-0.03, 0.04, 0]}>
+        <boxGeometry args={[0.032, 0.1, 0.035]} />
+        <meshStandardMaterial color="#f1f5f9" roughness={0.6} />
+      </mesh>
+      <mesh ref={rightLegRef} position={[0.03, 0.04, 0]}>
+        <boxGeometry args={[0.032, 0.1, 0.035]} />
+        <meshStandardMaterial color="#f1f5f9" roughness={0.6} />
+      </mesh>
+
+      {/* Mission patch stripe on shoulder */}
+      <mesh position={[-0.05, 0.18, 0]}>
+        <boxGeometry args={[0.005, 0.02, 0.02]} />
+        <meshBasicMaterial color="#ef4444" />
       </mesh>
     </group>
   );
 }
 
-// ── MOXIE / ISRU module ────────────────────────────────────────
-function LifeSupportModule({ isMars }: { isMars: boolean }) {
-  const ledRef = useRef<THREE.Mesh>(null);
-  const metalTex = useMemo(() => makeMetalTexture('#374151'), []);
+// ── Interactive Patrol Rover ─────────────────────────────────
+function PatrolRover({
+  isMars,
+  onClick,
+}: {
+  isMars: boolean;
+  onClick?: () => void;
+}) {
+  const roverGroup = useRef<THREE.Group>(null);
+  const wheelsRef = useRef<THREE.Group>(null);
+  const [honking, setHonking] = useState(false);
+  const [hovered, setHovered] = useState(false);
 
-  useFrame((state) => {
-    if (!ledRef.current) return;
-    const mat = ledRef.current.material as THREE.MeshStandardMaterial;
-    mat.emissiveIntensity = 0.6 + 0.4 * Math.abs(Math.sin(state.clock.getElapsedTime() * 2.2));
-  });
-
-  return (
-    <group position={[-0.78, -0.02, -0.32]}>
-      {/* Main housing */}
-      <mesh castShadow>
-        <boxGeometry args={[0.26, 0.34, 0.24]} />
-        <meshStandardMaterial map={metalTex} metalness={0.7} roughness={0.4} />
-      </mesh>
-
-      {/* Louvres / vents on front */}
-      {[0, 1, 2, 3].map((i) => (
-        <mesh key={i} position={[0, 0.08 - i * 0.055, 0.123]}>
-          <boxGeometry args={[0.2, 0.015, 0.006]} />
-          <meshStandardMaterial color="#1f2937" metalness={0.85} />
-        </mesh>
-      ))}
-
-      {/* Top exhaust stack */}
-      <mesh position={[0.06, 0.2, 0]}>
-        <cylinderGeometry args={[0.028, 0.022, 0.1, 8]} />
-        <meshStandardMaterial color="#6b7280" metalness={0.85} roughness={0.2} />
-      </mesh>
-
-      {/* Pipe connecting to dome */}
-      <mesh position={[0.2, 0.05, 0.1]} rotation={[0.4, 0.3, Math.PI / 2]}>
-        <cylinderGeometry args={[0.015, 0.015, 0.35, 8]} />
-        <meshStandardMaterial color="#4b5563" metalness={0.75} roughness={0.3} />
-      </mesh>
-
-      {/* Status LED panel */}
-      <mesh position={[0, 0.14, 0.125]}>
-        <boxGeometry args={[0.1, 0.04, 0.004]} />
-        <meshStandardMaterial color="#0f172a" metalness={0.5} />
-      </mesh>
-      <mesh ref={ledRef} position={[-0.03, 0.14, 0.128]}>
-        <sphereGeometry args={[0.01, 6, 6]} />
-        <meshStandardMaterial
-          color={isMars ? '#f97316' : '#10b981'}
-          emissive={isMars ? '#f97316' : '#10b981'}
-          emissiveIntensity={0.8}
-        />
-      </mesh>
-      <mesh position={[0.03, 0.14, 0.128]}>
-        <sphereGeometry args={[0.01, 6, 6]} />
-        <meshStandardMaterial color="#3b82f6" emissive="#3b82f6" emissiveIntensity={0.5} />
-      </mesh>
-
-      {/* Label plate */}
-      <mesh position={[0, -0.08, 0.126]}>
-        <boxGeometry args={[0.16, 0.05, 0.002]} />
-        <meshStandardMaterial color="#0f172a" roughness={0.8} />
-      </mesh>
-    </group>
-  );
-}
-
-// ── Water / oxygen tanks ───────────────────────────────────────
-function StorageTanks({ isMars: _isMars }: { isMars: boolean }) {
-  const metalTex = useMemo(() => makeMetalTexture('#94a3b8'), []);
-  return (
-    <group position={[-0.5, -0.04, 0.6]}>
-      {[0, 1].map((i) => (
-        <group key={i} position={[i * 0.22, 0, 0]}>
-          {/* Tank body */}
-          <mesh castShadow>
-            <capsuleGeometry args={[0.08, 0.22, 8, 16]} />
-            <meshStandardMaterial map={metalTex} metalness={0.85} roughness={0.2} />
-          </mesh>
-          {/* Color band */}
-          <mesh position={[0, 0, 0]} rotation={[Math.PI / 2, 0, 0]}>
-            <torusGeometry args={[0.082, 0.012, 8, 24]} />
-            <meshStandardMaterial
-              color={i === 0 ? '#1d4ed8' : '#059669'}
-              emissive={i === 0 ? '#1d4ed8' : '#059669'}
-              emissiveIntensity={0.3}
-            />
-          </mesh>
-          {/* Valve top */}
-          <mesh position={[0, 0.17, 0]}>
-            <cylinderGeometry args={[0.025, 0.025, 0.04, 8]} />
-            <meshStandardMaterial color="#374151" metalness={0.9} />
-          </mesh>
-          {/* Small pipe */}
-          <mesh position={[0.085, 0.05, 0]} rotation={[0, 0, Math.PI / 2]}>
-            <cylinderGeometry args={[0.008, 0.008, 0.1, 6]} />
-            <meshStandardMaterial color="#6b7280" metalness={0.9} roughness={0.2} />
-          </mesh>
-        </group>
-      ))}
-    </group>
-  );
-}
-
-// ── Rover ──────────────────────────────────────────────────────
-function Rover({ isMars: _isMars }: { isMars: boolean }) {
-  const ref = useRef<THREE.Group>(null);
   const metalTex = useMemo(() => makeMetalTexture('#374151'), []);
   const cellTex = useMemo(() => makeSolarCellTexture(), []);
 
-  // Very slow drift bob
   useFrame((state) => {
-    if (!ref.current) return;
-    ref.current.position.y = -0.11 + Math.sin(state.clock.getElapsedTime() * 0.4) * 0.003;
+    const t = state.clock.getElapsedTime();
+    if (!roverGroup.current) return;
+
+    // Patrol trajectory in wide elliptical arc on terrain
+    const angle = t * 0.15;
+    const rX = 1.35;
+    const rZ = 1.0;
+    const x = Math.sin(angle) * rX;
+    const z = Math.cos(angle) * rZ + 0.3;
+    roverGroup.current.position.x = x;
+    roverGroup.current.position.z = z;
+    roverGroup.current.position.y = -0.11 + Math.sin(t * 2) * 0.004;
+
+    // Face direction of motion
+    const dx = Math.cos(angle) * rX;
+    const dz = -Math.sin(angle) * rZ;
+    roverGroup.current.rotation.y = Math.atan2(dx, dz);
+
+    if (wheelsRef.current) {
+      wheelsRef.current.children.forEach((w) => {
+        w.rotation.x += 0.08;
+      });
+    }
   });
 
-  const wheelPos: [number, number, number][] = [
+  const handleClick = (e: { stopPropagation: () => void }) => {
+    e.stopPropagation();
+    soundFx.playRoverHorn();
+    setHonking(true);
+    setTimeout(() => setHonking(false), 800);
+    onClick?.();
+  };
+
+  const wheelPositions: [number, number, number][] = [
     [-0.14, -0.07, 0.12], [0.14, -0.07, 0.12],
     [-0.14, -0.07, -0.12], [0.14, -0.07, -0.12],
     [-0.14, -0.07, 0.0], [0.14, -0.07, 0.0],
   ];
 
   return (
-    <group ref={ref} position={[1.0, -0.11, 0.65]} rotation={[0, 0.4, 0]}>
-      {/* Main chassis */}
+    <group
+      ref={roverGroup}
+      position={[1.2, -0.11, 0.8]}
+      onClick={handleClick}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHovered(true);
+        document.body.style.cursor = 'pointer';
+      }}
+      onPointerOut={() => {
+        setHovered(false);
+        document.body.style.cursor = 'default';
+      }}
+    >
+      {/* Main Chassis */}
       <mesh castShadow>
-        <boxGeometry args={[0.32, 0.09, 0.28]} />
-        <meshStandardMaterial map={metalTex} metalness={0.65} roughness={0.4} />
-      </mesh>
-
-      {/* Equipment deck */}
-      <mesh position={[0, 0.06, 0]}>
-        <boxGeometry args={[0.28, 0.04, 0.22]} />
+        <boxGeometry args={[0.34, 0.09, 0.28]} />
         <meshStandardMaterial map={metalTex} metalness={0.7} roughness={0.35} />
       </mesh>
 
-      {/* Mini solar panel on top */}
-      <mesh position={[0, 0.1, 0]} rotation={[-0.15, 0, 0]}>
-        <boxGeometry args={[0.22, 0.012, 0.14]} />
-        <meshStandardMaterial map={cellTex} metalness={0.6} roughness={0.15} emissive="#1e3a8a" emissiveIntensity={0.2} />
+      {/* Equipment Deck */}
+      <mesh position={[0, 0.06, 0]}>
+        <boxGeometry args={[0.28, 0.04, 0.24]} />
+        <meshStandardMaterial color="#1e293b" metalness={0.8} roughness={0.3} />
       </mesh>
 
-      {/* Science arm */}
-      <mesh position={[0.14, 0.1, 0]} rotation={[0, 0, -0.5]}>
-        <cylinderGeometry args={[0.008, 0.008, 0.18, 6]} />
-        <meshStandardMaterial color="#9ca3af" metalness={0.85} roughness={0.2} />
-      </mesh>
-      <mesh position={[0.2, 0.17, 0]}>
-        <sphereGeometry args={[0.022, 8, 8]} />
-        <meshStandardMaterial color="#4b5563" metalness={0.9} roughness={0.2} />
+      {/* Top Solar Wing Panel */}
+      <mesh position={[0, 0.1, -0.02]} rotation={[-0.1, 0, 0]}>
+        <boxGeometry args={[0.24, 0.012, 0.16]} />
+        <meshStandardMaterial map={cellTex} metalness={0.7} roughness={0.15} emissive="#1e3a8a" emissiveIntensity={0.25} />
       </mesh>
 
-      {/* Camera mast */}
-      <mesh position={[-0.1, 0.15, 0]}>
+      {/* Science Arm & Mast */}
+      <mesh position={[0.13, 0.12, 0.06]} rotation={[0, 0, -0.4]}>
         <cylinderGeometry args={[0.009, 0.009, 0.18, 6]} />
+        <meshStandardMaterial color="#94a3b8" metalness={0.85} roughness={0.2} />
+      </mesh>
+      <mesh position={[0.19, 0.19, 0.06]}>
+        <sphereGeometry args={[0.024, 8, 8]} />
+        <meshStandardMaterial color="#475569" metalness={0.9} roughness={0.2} />
+      </mesh>
+
+      {/* Camera Mast */}
+      <mesh position={[-0.1, 0.16, 0]}>
+        <cylinderGeometry args={[0.009, 0.009, 0.2, 6]} />
         <meshStandardMaterial color="#9ca3af" metalness={0.85} roughness={0.2} />
       </mesh>
-      {/* Camera head */}
-      <mesh position={[-0.1, 0.25, 0]}>
-        <boxGeometry args={[0.028, 0.022, 0.04]} />
-        <meshStandardMaterial color="#1f2937" metalness={0.8} roughness={0.3} />
+      <mesh position={[-0.1, 0.26, 0]}>
+        <boxGeometry args={[0.032, 0.024, 0.045]} />
+        <meshStandardMaterial color="#0f172a" metalness={0.9} roughness={0.2} />
       </mesh>
 
-      {/* Wheel suspension arms + wheels */}
-      {wheelPos.map((pos, i) => (
-        <group key={i} position={pos}>
-          {/* Suspension */}
-          <mesh position={[0, 0.03, 0]}>
-            <boxGeometry args={[0.02, 0.06, 0.02]} />
-            <meshStandardMaterial color="#4b5563" metalness={0.7} roughness={0.4} />
-          </mesh>
-          {/* Wheel */}
-          <mesh rotation={[Math.PI / 2, 0, 0]}>
-            <cylinderGeometry args={[0.06, 0.06, 0.035, 18]} />
-            <meshStandardMaterial color="#111827" roughness={0.97} metalness={0.0} />
-          </mesh>
-          {/* Hub */}
-          <mesh rotation={[Math.PI / 2, 0, 0]}>
-            <cylinderGeometry args={[0.022, 0.022, 0.038, 8]} />
-            <meshStandardMaterial color="#6b7280" metalness={0.9} roughness={0.2} />
-          </mesh>
-          {/* Tread marks */}
-          {[0, 1, 2, 3, 4].map((t) => (
-            <mesh key={t} rotation={[Math.PI / 2, (t / 5) * Math.PI * 2, 0]}>
-              <torusGeometry args={[0.055, 0.006, 4, 18, Math.PI / 6]} />
-              <meshStandardMaterial color="#0f172a" roughness={1} />
-            </mesh>
-          ))}
-        </group>
-      ))}
+      {/* Active Headlights / High Beams */}
+      <spotLight
+        position={[0, 0.04, 0.16]}
+        target-position={[0, -0.15, 1.2]}
+        intensity={honking || hovered ? 2.5 : 1.2}
+        color="#fef08a"
+        angle={0.5}
+        penumbra={0.6}
+        distance={2.5}
+      />
+      <mesh position={[-0.1, 0.04, 0.145]}>
+        <sphereGeometry args={[0.015, 8, 8]} />
+        <meshBasicMaterial color={honking ? '#ffffff' : '#fef08a'} />
+      </mesh>
+      <mesh position={[0.1, 0.04, 0.145]}>
+        <sphereGeometry args={[0.015, 8, 8]} />
+        <meshBasicMaterial color={honking ? '#ffffff' : '#fef08a'} />
+      </mesh>
 
-      {/* Rover nav lights */}
-      <pointLight position={[0.16, 0.04, 0.14]} intensity={0.2} color="#fbbf24" distance={0.4} />
+      {/* 6 Wheels with individual hubs */}
+      <group ref={wheelsRef}>
+        {wheelPositions.map((pos, i) => (
+          <group key={i} position={pos}>
+            <mesh rotation={[0, 0, Math.PI / 2]}>
+              <cylinderGeometry args={[0.062, 0.062, 0.04, 16]} />
+              <meshStandardMaterial color="#111827" roughness={0.95} metalness={0.05} />
+            </mesh>
+            <mesh rotation={[0, 0, Math.PI / 2]}>
+              <cylinderGeometry args={[0.024, 0.024, 0.044, 8]} />
+              <meshStandardMaterial color="#64748b" metalness={0.9} roughness={0.2} />
+            </mesh>
+          </group>
+        ))}
+      </group>
+
+      {/* Status indicator pin */}
+      <mesh position={[0, 0.24, -0.06]}>
+        <sphereGeometry args={[0.012, 6, 6]} />
+        <meshBasicMaterial color={isMars ? '#f97316' : '#22d3ee'} />
+      </mesh>
     </group>
   );
 }
 
-// ── Power cable runs ───────────────────────────────────────────
-function CableRun({ from, to, color = '#1f2937' }: { from: [number, number, number]; to: [number, number, number]; color?: string }) {
-  const mid: [number, number, number] = [(from[0] + to[0]) / 2, from[1] - 0.04, (from[2] + to[2]) / 2];
-  const curve = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(...from),
-    new THREE.Vector3(...mid),
-    new THREE.Vector3(...to),
-  ]);
-  const points = curve.getPoints(24);
-  const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points.map(p => p)), 24, 0.012, 6, false);
+// ── Sintered Regolith / Forcefield Shield Dome ─────────────────
+function SinterShieldDome({
+  active,
+  thicknessCm,
+  isMars,
+}: {
+  active: boolean;
+  thicknessCm: number;
+  isMars: boolean;
+}) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const ringRef = useRef<THREE.Mesh>(null);
+
+  useFrame((state) => {
+    const t = state.clock.getElapsedTime();
+    if (meshRef.current) {
+      meshRef.current.rotation.y = t * 0.06;
+      const mat = meshRef.current.material as THREE.MeshStandardMaterial;
+      const pulse = Math.sin(t * 3) * 0.05;
+      const baseOpacity = active ? 0.35 : Math.min(0.25, (thicknessCm / 50) * 0.25);
+      mat.opacity = baseOpacity + pulse;
+    }
+    if (ringRef.current) {
+      ringRef.current.rotation.z = -t * 0.2;
+    }
+  });
+
+  const shieldColor = isMars ? '#f97316' : '#06b6d4';
+  const emissiveColor = isMars ? '#ea580c' : '#0891b2';
+
+  if (!active && thicknessCm <= 0) return null;
+
   return (
-    <mesh geometry={geo}>
-      <meshStandardMaterial color={color} roughness={0.85} metalness={0.2} />
-    </mesh>
+    <group position={[0, 0.07, 0]}>
+      {/* Geodesic translucent forcefield dome */}
+      <mesh ref={meshRef}>
+        <sphereGeometry args={[0.82, 32, 24, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <meshStandardMaterial
+          color={shieldColor}
+          emissive={emissiveColor}
+          emissiveIntensity={active ? 1.5 : 0.6}
+          wireframe
+          transparent
+          opacity={0.3}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+
+      {/* Shimmer inner layer */}
+      <mesh>
+        <sphereGeometry args={[0.8, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <meshStandardMaterial
+          color={shieldColor}
+          transparent
+          opacity={active ? 0.18 : 0.08}
+          roughness={0.1}
+          metalness={0.9}
+          side={THREE.BackSide}
+          depthWrite={false}
+        />
+      </mesh>
+
+      {/* Ground perimeter emitter ring */}
+      <mesh ref={ringRef} position={[0, -0.16, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.82, 0.88, 36]} />
+        <meshBasicMaterial color={shieldColor} transparent opacity={0.7} side={THREE.DoubleSide} />
+      </mesh>
+    </group>
   );
 }
 
-// ── Full Outpost Assembly ──────────────────────────────────────
-function OutpostModel({ health, isMars }: { health: number; isMars: boolean }) {
-  const groupRef = useRef<THREE.Group>(null);
+// ── Overhead Satellite in Orbit ──────────────────────────────
+function OverheadSatellite({ isMars }: { isMars: boolean }) {
+  const satRef = useRef<THREE.Group>(null);
+  const beaconRef = useRef<THREE.PointLight>(null);
 
   useFrame((state) => {
-    if (!groupRef.current) return;
-    groupRef.current.rotation.y = Math.sin(state.clock.getElapsedTime() * 0.18) * 0.18;
+    const t = state.clock.getElapsedTime();
+    if (!satRef.current) return;
+    const speed = 0.12;
+    const x = Math.sin(t * speed) * 3.8;
+    const z = Math.cos(t * speed) * 3.8;
+    satRef.current.position.set(x, 2.8 + Math.sin(t * 0.2) * 0.3, z);
+    satRef.current.rotation.y = t * 0.3;
+
+    if (beaconRef.current) {
+      beaconRef.current.intensity = Math.sin(t * 6) > 0.5 ? 1.2 : 0.1;
+    }
   });
 
   return (
-    <group ref={groupRef} position={[0, -0.02, 0]}>
-      <Ground isMars={isMars} />
-      <HabitatDome health={health} isMars={isMars} />
-      <SolarPanel side={-1} isMars={isMars} />
-      <SolarPanel side={1} isMars={isMars} />
-      <Antenna isMars={isMars} />
-      <LifeSupportModule isMars={isMars} />
-      <StorageTanks isMars={isMars} />
-      <Rover isMars={isMars} />
+    <group ref={satRef} position={[2, 2.8, -2]} scale={0.6}>
+      {/* Central body */}
+      <mesh>
+        <boxGeometry args={[0.14, 0.1, 0.1]} />
+        <meshStandardMaterial color="#cbd5e1" metalness={0.9} roughness={0.1} />
+      </mesh>
 
-      {/* Power cables */}
-      <CableRun from={[-0.62, -0.13, 0.05]} to={[-0.78, -0.13, -0.22]} color="#374151" />
-      <CableRun from={[0.62, -0.13, 0.05]} to={[0.2, -0.13, -0.38]} color="#374151" />
-
-      {/* Footprint path from airlock to rover */}
-      {[0, 1, 2, 3, 4].map((i) => (
-        <mesh key={i} position={[0.68 + i * 0.08, -0.175, 0.1 + i * 0.1]} rotation={[-Math.PI / 2, 0, i * 0.15]}>
-          <planeGeometry args={[0.05, 0.08]} />
-          <meshStandardMaterial color={isMars ? '#6b1d0a' : '#1f2937'} transparent opacity={0.5} />
+      {/* Solar wings left and right */}
+      {[-0.24, 0.24].map((x, i) => (
+        <mesh key={i} position={[x, 0, 0]}>
+          <boxGeometry args={[0.26, 0.01, 0.12]} />
+          <meshStandardMaterial color="#1e3a8a" emissive="#1e40af" emissiveIntensity={0.3} metalness={0.8} />
         </mesh>
       ))}
+
+      {/* Comms dish */}
+      <mesh position={[0, -0.07, 0]} rotation={[Math.PI, 0, 0]}>
+        <coneGeometry args={[0.06, 0.04, 12, 1, true]} />
+        <meshStandardMaterial color="#94a3b8" metalness={0.9} side={THREE.DoubleSide} />
+      </mesh>
+
+      {/* Beacon light */}
+      <pointLight ref={beaconRef} color={isMars ? '#22c55e' : '#ef4444'} intensity={0.5} distance={1.2} />
+    </group>
+  );
+}
+
+// ── Environmental Weather / Hazard Effects ────────────────────
+function EnvironmentalEffects({
+  isMars,
+  activeHazard,
+}: {
+  isMars: boolean;
+  activeHazard?: string | null;
+}) {
+  const pointsRef = useRef<THREE.Points>(null);
+  const stormRef = useRef<THREE.Points>(null);
+
+  useFrame((state) => {
+    const t = state.clock.getElapsedTime();
+    if (pointsRef.current) {
+      pointsRef.current.rotation.y = t * 0.04;
+    }
+    if (stormRef.current) {
+      stormRef.current.rotation.y = t * 0.8;
+      stormRef.current.position.y = Math.sin(t * 2) * 0.08;
+    }
+  });
+
+  // Base ambient stardust / floating micro-particles
+  const dustPositions = useMemo(() => {
+    const pos = new Float32Array(DUST_COUNT * 3);
+    DUST_DATA.forEach((d, i) => {
+      pos[i * 3] = Math.cos(d.angle) * d.radius;
+      pos[i * 3 + 1] = d.height;
+      pos[i * 3 + 2] = Math.sin(d.angle) * d.radius;
+    });
+    return pos;
+  }, []);
+
+  // Storm hazard particle array
+  const stormPositions = useMemo(() => {
+    const pos = new Float32Array(100 * 3);
+    HAZARD_PARTICLES.forEach((p, i) => {
+      pos[i * 3] = Math.cos(p.angle) * p.dist;
+      pos[i * 3 + 1] = p.height;
+      pos[i * 3 + 2] = Math.sin(p.angle) * p.dist;
+    });
+    return pos;
+  }, []);
+
+  return (
+    <group>
+      {/* Floating ambient space dust */}
+      <points ref={pointsRef}>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" args={[dustPositions, 3]} />
+        </bufferGeometry>
+        <pointsMaterial
+          size={0.03}
+          color={isMars ? '#fdba74' : '#93c5fd'}
+          transparent
+          opacity={0.5}
+          sizeAttenuation
+        />
+      </points>
+
+      {/* Swirling storm particles when hazard is active */}
+      {activeHazard && (
+        <points ref={stormRef}>
+          <bufferGeometry>
+            <bufferAttribute attach="attributes-position" args={[stormPositions, 3]} />
+          </bufferGeometry>
+          <pointsMaterial
+            size={0.05}
+            color={activeHazard === 'solar-flare' ? '#f59e0b' : '#ef4444'}
+            transparent
+            opacity={0.8}
+            sizeAttenuation
+          />
+        </points>
+      )}
+    </group>
+  );
+}
+
+// ── Habitat Dome ──────────────────────────────────────────────
+function HabitatDome({
+  health: _health,
+  isMars: _isMars,
+  onClick,
+}: {
+  health: number;
+  isMars: boolean;
+  onClick?: () => void;
+}) {
+  const innerRef = useRef<THREE.PointLight>(null);
+  const [pulse, setPulse] = useState(false);
+  const [hovered, setHovered] = useState(false);
+
+  const domeTexture = useMemo(() => makeDomeTexture(), []);
+  const metalTex = useMemo(() => makeMetalTexture('#374151'), []);
+
+  useFrame((state) => {
+    if (!innerRef.current) return;
+    const boost = pulse ? 1.5 : 0;
+    innerRef.current.intensity = 0.6 + 0.15 * Math.sin(state.clock.getElapsedTime() * 1.2) + boost;
+  });
+
+  const handleClick = (e: { stopPropagation: () => void }) => {
+    e.stopPropagation();
+    soundFx.playAirlockHiss();
+    setPulse(true);
+    setTimeout(() => setPulse(false), 900);
+    onClick?.();
+  };
+
+  return (
+    <group
+      onClick={handleClick}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHovered(true);
+        document.body.style.cursor = 'pointer';
+      }}
+      onPointerOut={() => {
+        setHovered(false);
+        document.body.style.cursor = 'default';
+      }}
+    >
+      {/* Foundation ring */}
+      <mesh position={[0, -0.1, 0]}>
+        <cylinderGeometry args={[0.6, 0.65, 0.12, 32]} />
+        <meshStandardMaterial map={metalTex} roughness={0.8} metalness={0.5} />
+      </mesh>
+
+      {/* Main pressurized dome */}
+      <mesh position={[0, 0.07, 0]} castShadow>
+        <sphereGeometry args={[0.58, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <meshStandardMaterial
+          map={domeTexture}
+          roughness={0.22}
+          metalness={0.6}
+          emissive={hovered ? '#06b6d4' : '#000000'}
+          emissiveIntensity={hovered ? 0.3 : 0}
+        />
+      </mesh>
+
+      {/* Glowing Neon Seal Ring */}
+      <mesh position={[0, 0.08, 0]}>
+        <torusGeometry args={[0.585, 0.024, 12, 80]} />
+        <meshStandardMaterial
+          color="#06b6d4"
+          emissive="#06b6d4"
+          emissiveIntensity={hovered ? 3.0 : 1.8}
+          metalness={0.9}
+        />
+      </mesh>
+
+      {/* Airlock Vestibule */}
+      <mesh position={[0.55, -0.05, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.12, 0.12, 0.22, 16]} />
+        <meshStandardMaterial map={metalTex} roughness={0.4} metalness={0.75} />
+      </mesh>
+      {/* Airlock Door */}
+      <mesh position={[0.67, -0.05, 0]} rotation={[0, Math.PI / 2, 0]}>
+        <circleGeometry args={[0.1, 16]} />
+        <meshStandardMaterial color="#374151" roughness={0.5} metalness={0.8} />
+      </mesh>
+
+      {/* Interior Warm Habitation Light */}
+      <pointLight ref={innerRef} position={[0, 0.12, 0]} intensity={0.6} color="#fde68a" distance={1.2} />
+    </group>
+  );
+}
+
+// ── Solar Panel Array ─────────────────────────────────────────
+function SolarPanel({
+  side,
+  isMars,
+  onClick,
+}: {
+  side: -1 | 1;
+  isMars: boolean;
+  onClick?: () => void;
+}) {
+  const panelRef = useRef<THREE.Group>(null);
+  const [hovered, setHovered] = useState(false);
+  const cellTex = useMemo(() => makeSolarCellTexture(), []);
+  const metalTex = useMemo(() => makeMetalTexture('#4b5563'), []);
+
+  useFrame((state) => {
+    if (!panelRef.current) return;
+    panelRef.current.rotation.z = side * 0.04 * Math.sin(state.clock.getElapsedTime() * 0.6);
+  });
+
+  const handleClick = (e: { stopPropagation: () => void }) => {
+    e.stopPropagation();
+    soundFx.playScanner();
+    onClick?.();
+  };
+
+  return (
+    <group
+      ref={panelRef}
+      position={[side * 1.05, 0.12, 0.05]}
+      onClick={handleClick}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHovered(true);
+        document.body.style.cursor = 'pointer';
+      }}
+      onPointerOut={() => {
+        setHovered(false);
+        document.body.style.cursor = 'default';
+      }}
+    >
+      {/* Mast */}
+      <mesh position={[0, -0.06, 0]}>
+        <cylinderGeometry args={[0.02, 0.02, 0.28, 10]} />
+        <meshStandardMaterial map={metalTex} metalness={0.85} roughness={0.25} />
+      </mesh>
+
+      {/* Boom */}
+      <mesh position={[0, 0.09, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.013, 0.013, 0.82, 8]} />
+        <meshStandardMaterial map={metalTex} metalness={0.85} roughness={0.3} />
+      </mesh>
+
+      {/* Two panel arrays */}
+      {([-0.28, 0.28] as const).map((offset, pi) => (
+        <group key={pi} position={[offset, 0.09, 0]}>
+          <mesh rotation={[0.12, 0, 0]} castShadow>
+            <boxGeometry args={[0.42, 0.02, 0.24]} />
+            <meshStandardMaterial
+              map={cellTex}
+              metalness={0.7}
+              roughness={0.15}
+              emissive={hovered ? '#3b82f6' : isMars ? '#0c1550' : '#1e3a8a'}
+              emissiveIntensity={hovered ? 0.6 : 0.25}
+            />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+// ── Spinning High-Gain Antenna Dish ──────────────────────────
+function HighGainAntenna({
+  isMars,
+  onClick,
+}: {
+  isMars: boolean;
+  onClick?: () => void;
+}) {
+  const dishRef = useRef<THREE.Group>(null);
+  const ringPulseRef = useRef<THREE.Mesh>(null);
+  const [hovered, setHovered] = useState(false);
+  const metalTex = useMemo(() => makeMetalTexture('#6b7280'), []);
+
+  useFrame((state) => {
+    const t = state.clock.getElapsedTime();
+    if (dishRef.current) {
+      dishRef.current.rotation.y = t * 0.45;
+    }
+    if (ringPulseRef.current) {
+      const s = 1 + (t * 2) % 2.5;
+      ringPulseRef.current.scale.set(s, s, s);
+      const mat = ringPulseRef.current.material as THREE.MeshBasicMaterial;
+      mat.opacity = Math.max(0, 1 - (s - 1) / 1.5) * 0.5;
+    }
+  });
+
+  const handleClick = (e: { stopPropagation: () => void }) => {
+    e.stopPropagation();
+    soundFx.playTelemetryPing();
+    onClick?.();
+  };
+
+  return (
+    <group
+      position={[0.18, 0, -0.42]}
+      onClick={handleClick}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHovered(true);
+        document.body.style.cursor = 'pointer';
+      }}
+      onPointerOut={() => {
+        setHovered(false);
+        document.body.style.cursor = 'default';
+      }}
+    >
+      <mesh position={[0, -0.14, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[0.08, 12]} />
+        <meshStandardMaterial color="#374151" roughness={0.9} />
+      </mesh>
+
+      <mesh position={[0, 0.24, 0]}>
+        <cylinderGeometry args={[0.014, 0.018, 0.72, 10]} />
+        <meshStandardMaterial map={metalTex} metalness={0.9} roughness={0.2} />
+      </mesh>
+
+      {/* Dish Assembly */}
+      <group ref={dishRef} position={[0, 0.62, 0]} rotation={[0.45, 0, 0]}>
+        <mesh>
+          <sphereGeometry args={[0.13, 24, 24, 0, Math.PI * 2, 0, Math.PI / 1.8]} />
+          <meshStandardMaterial
+            map={metalTex}
+            metalness={0.9}
+            roughness={0.15}
+            side={THREE.DoubleSide}
+            emissive={hovered ? '#06b6d4' : '#000000'}
+            emissiveIntensity={hovered ? 0.3 : 0}
+          />
+        </mesh>
+        <mesh position={[0, 0.07, 0]}>
+          <cylinderGeometry args={[0.015, 0.02, 0.05, 8]} />
+          <meshStandardMaterial color="#1f2937" metalness={0.95} />
+        </mesh>
+      </group>
+
+      {/* Expanding radio telemetry wave ring */}
+      <mesh ref={ringPulseRef} position={[0, 0.64, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.1, 0.12, 24]} />
+        <meshBasicMaterial color={isMars ? '#f97316' : '#22d3ee'} transparent opacity={0.4} side={THREE.DoubleSide} />
+      </mesh>
+
+      {/* Blinking Top Beacon */}
+      <mesh position={[0, 0.64, 0]}>
+        <sphereGeometry args={[0.018, 8, 8]} />
+        <meshStandardMaterial
+          color={isMars ? '#f97316' : '#06b6d4'}
+          emissive={isMars ? '#f97316' : '#06b6d4'}
+          emissiveIntensity={hovered ? 3.0 : 1.6}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+// ── MOXIE / Life Support & ISRU Unit ──────────────────────────
+function LifeSupportUnit({
+  isMars,
+  onClick,
+}: {
+  isMars: boolean;
+  onClick?: () => void;
+}) {
+  const metalTex = useMemo(() => makeMetalTexture('#374151'), []);
+
+  return (
+    <group
+      position={[-0.78, -0.02, -0.32]}
+      onClick={(e) => {
+        e.stopPropagation();
+        soundFx.playBeep(640);
+        onClick?.();
+      }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        document.body.style.cursor = 'pointer';
+      }}
+      onPointerOut={() => {
+        document.body.style.cursor = 'default';
+      }}
+    >
+      <mesh castShadow>
+        <boxGeometry args={[0.26, 0.34, 0.24]} />
+        <meshStandardMaterial map={metalTex} metalness={0.7} roughness={0.4} />
+      </mesh>
+      {/* Exhaust stack */}
+      <mesh position={[0.06, 0.2, 0]}>
+        <cylinderGeometry args={[0.028, 0.022, 0.1, 8]} />
+        <meshStandardMaterial color="#6b7280" metalness={0.85} roughness={0.2} />
+      </mesh>
+      {/* Pipe connection */}
+      <mesh position={[0.2, 0.05, 0.1]} rotation={[0.4, 0.3, Math.PI / 2]}>
+        <cylinderGeometry args={[0.015, 0.015, 0.35, 8]} />
+        <meshStandardMaterial color="#4b5563" metalness={0.75} roughness={0.3} />
+      </mesh>
+      {/* Dual status LEDs */}
+      <mesh position={[-0.03, 0.14, 0.128]}>
+        <sphereGeometry args={[0.01, 6, 6]} />
+        <meshStandardMaterial
+          color={isMars ? '#f97316' : '#10b981'}
+          emissive={isMars ? '#f97316' : '#10b981'}
+          emissiveIntensity={1.2}
+        />
+      </mesh>
+      <mesh position={[0.03, 0.14, 0.128]}>
+        <sphereGeometry args={[0.01, 6, 6]} />
+        <meshStandardMaterial color="#3b82f6" emissive="#3b82f6" emissiveIntensity={0.8} />
+      </mesh>
+    </group>
+  );
+}
+
+// ── Water & Oxygen Storage Tanks ──────────────────────────────
+function ResourceTanks() {
+  const metalTex = useMemo(() => makeMetalTexture('#94a3b8'), []);
+  return (
+    <group position={[-0.5, -0.04, 0.6]}>
+      {[0, 1].map((i) => (
+        <group key={i} position={[i * 0.22, 0, 0]}>
+          <mesh castShadow>
+            <capsuleGeometry args={[0.08, 0.22, 8, 16]} />
+            <meshStandardMaterial map={metalTex} metalness={0.85} roughness={0.2} />
+          </mesh>
+          <mesh position={[0, 0, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.082, 0.012, 8, 24]} />
+            <meshStandardMaterial
+              color={i === 0 ? '#1d4ed8' : '#059669'}
+              emissive={i === 0 ? '#1d4ed8' : '#059669'}
+              emissiveIntensity={0.5}
+            />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+// ── Ground Terrain ───────────────────────────────────────────
+function TerrainGround({ isMars }: { isMars: boolean }) {
+  const textures = useMemo(() => ({
+    color: makeRegolithTexture(isMars),
+    normal: makeRegolithNormalMap(),
+  }), [isMars]);
+
+  return (
+    <group>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.18, 0]} receiveShadow>
+        <circleGeometry args={[3.2, 96]} />
+        <meshStandardMaterial
+          map={textures.color}
+          normalMap={textures.normal}
+          normalScale={new THREE.Vector2(1.2, 1.2)}
+          roughness={0.95}
+          metalness={0.05}
+        />
+      </mesh>
+      {/* Outer berm perimeter */}
+      <mesh position={[0, -0.14, 0]}>
+        <torusGeometry args={[2.7, 0.16, 8, 96]} />
+        <meshStandardMaterial color={isMars ? '#6b1d0a' : '#1f2937'} roughness={1} />
+      </mesh>
+    </group>
+  );
+}
+
+// ── Interactive Smooth Camera Controller ──────────────────────
+function SmoothCameraController({
+  cameraMode,
+  controlsRef,
+}: {
+  cameraMode: 'orbit' | 'dome' | 'rover' | 'solar' | 'comms' | 'wide';
+  controlsRef: React.RefObject<OrbitControlsType | null>;
+}) {
+  const { camera } = useThree();
+
+  const presets = useMemo(() => ({
+    orbit: { pos: new THREE.Vector3(0.3, 2.1, 4.2), target: new THREE.Vector3(0, 0, 0) },
+    dome:  { pos: new THREE.Vector3(0.0, 0.85, 2.2), target: new THREE.Vector3(0, 0.15, 0) },
+    rover: { pos: new THREE.Vector3(1.6, 0.65, 1.8), target: new THREE.Vector3(1.2, -0.05, 0.7) },
+    solar: { pos: new THREE.Vector3(-1.6, 0.75, 1.5), target: new THREE.Vector3(-1.0, 0.15, 0.05) },
+    comms: { pos: new THREE.Vector3(0.6, 1.1, 0.6), target: new THREE.Vector3(0.18, 0.5, -0.42) },
+    wide:  { pos: new THREE.Vector3(0.0, 3.9, 5.8), target: new THREE.Vector3(0, -0.1, 0) },
+  }), []);
+
+  useFrame(() => {
+    const target = presets[cameraMode] || presets.orbit;
+    camera.position.lerp(target.pos, 0.05);
+    if (controlsRef.current) {
+      controlsRef.current.target.lerp(target.target, 0.05);
+      controlsRef.current.update();
+    }
+  });
+
+  return null;
+}
+
+// ── Main Outpost Assembly ────────────────────────────────────
+function FullOutpostModel({
+  health,
+  isMars,
+  activeHazard,
+  shieldActive,
+  shieldThickness,
+  onInspect,
+}: {
+  health: number;
+  isMars: boolean;
+  activeHazard?: string | null;
+  shieldActive: boolean;
+  shieldThickness: number;
+  onInspect?: (objectName: string) => void;
+}) {
+  return (
+    <group position={[0, -0.02, 0]}>
+      <TerrainGround isMars={isMars} />
+      <HabitatDome health={health} isMars={isMars} onClick={() => onInspect?.('dome')} />
+      <SolarPanel side={-1} isMars={isMars} onClick={() => onInspect?.('solar')} />
+      <SolarPanel side={1} isMars={isMars} onClick={() => onInspect?.('solar')} />
+      <HighGainAntenna isMars={isMars} onClick={() => onInspect?.('antenna')} />
+      <LifeSupportUnit isMars={isMars} onClick={() => onInspect?.('lifesupport')} />
+      <ResourceTanks />
+      <PatrolRover isMars={isMars} onClick={() => onInspect?.('rover')} />
+      <AstronautCharacter isMars={isMars} onClick={() => onInspect?.('crew')} />
+      <SinterShieldDome active={shieldActive} thicknessCm={shieldThickness} isMars={isMars} />
+      <OverheadSatellite isMars={isMars} />
+      <EnvironmentalEffects isMars={isMars} activeHazard={activeHazard} />
+
+      {/* Floating 3D Holographic Pins over key modules */}
+      <HoloPin
+        position={[0, 0.88, 0]}
+        label="HAB DOME"
+        icon="🏠"
+        color="#22d3ee"
+        onClick={() => onInspect?.('dome')}
+      />
+      <HoloPin
+        position={[-1.05, 0.58, 0.05]}
+        label="SOLAR ARRAY"
+        icon="⚡"
+        color="#fbbf24"
+        onClick={() => onInspect?.('solar')}
+      />
+      <HoloPin
+        position={[0.18, 0.88, -0.42]}
+        label="COMMS DISH"
+        icon="📡"
+        color="#a78bfa"
+        onClick={() => onInspect?.('antenna')}
+      />
     </group>
   );
 }
 
 // ── Exported MiniOutpostScene ──────────────────────────────────
+export interface MiniOutpostSceneProps {
+  health?: number;
+  isMars?: boolean;
+  activeHazard?: string | null;
+  shieldActive?: boolean;
+  shieldThickness?: number;
+  cameraMode?: 'orbit' | 'dome' | 'rover' | 'solar' | 'comms' | 'wide';
+  onInspect?: (objectName: string) => void;
+}
+
 export function MiniOutpostScene({
   health = 100,
   isMars = false,
-}: {
-  health?: number;
-  isMars?: boolean;
-}) {
+  activeHazard = null,
+  shieldActive = false,
+  shieldThickness = 20,
+  cameraMode = 'orbit',
+  onInspect,
+}: MiniOutpostSceneProps) {
+  const controlsRef = useRef<OrbitControlsType | null>(null);
+
   return (
     <Canvas
-      camera={{ position: [0.3, 2.1, 4.2], fov: 40 }}
+      camera={{ position: [0.3, 2.1, 4.2], fov: 42 }}
       style={{ width: '100%', height: '100%' }}
-      dpr={[1, 2]}
+      dpr={[1, 1.5]}
       gl={{ antialias: true, alpha: true }}
       shadows
     >
-      {/* Sky ambient */}
-      <ambientLight intensity={0.45} color="#dde8f0" />
+      <ambientLight intensity={0.4} color="#dde8f0" />
 
-      {/* Sun directional (key light) */}
+      {/* Primary directional sun */}
       <directionalLight
         position={[6, 7, 5]}
-        intensity={isMars ? 1.9 : 2.6}
+        intensity={isMars ? 2.0 : 2.8}
         color={isMars ? '#fde8c8' : '#fff8f0'}
         castShadow
         shadow-mapSize={[1024, 1024]}
-        shadow-camera-near={0.5}
-        shadow-camera-far={20}
-        shadow-camera-left={-3}
-        shadow-camera-right={3}
-        shadow-camera-top={3}
-        shadow-camera-bottom={-3}
       />
 
-      {/* Sky hemisphere bounce */}
+      {/* Atmospheric hemisphere bounce */}
       <hemisphereLight
         args={[
           isMars ? '#f97316' : '#bfdbfe',
@@ -789,24 +1303,33 @@ export function MiniOutpostScene({
       />
 
       {/* Ground albedo fill */}
-      <pointLight
-        position={[-4, -1, 4]}
-        intensity={isMars ? 0.5 : 0.6}
-        color={isMars ? '#b45309' : '#1e40af'}
+      <pointLight position={[-4, -1, 4]} intensity={0.5} color={isMars ? '#b45309' : '#1e40af'} />
+
+      {/* Deep space stars */}
+      <Stars radius={70} depth={40} count={2200} factor={3} saturation={0} fade speed={0.3} />
+
+      {/* Smooth camera animation controller */}
+      <SmoothCameraController cameraMode={cameraMode} controlsRef={controlsRef} />
+
+      {/* The 3D outpost */}
+      <FullOutpostModel
+        health={health}
+        isMars={isMars}
+        activeHazard={activeHazard}
+        shieldActive={shieldActive}
+        shieldThickness={shieldThickness}
+        onInspect={onInspect}
       />
 
-      {/* Stars */}
-      <Stars radius={70} depth={40} count={2000} factor={3} saturation={0} fade speed={0.3} />
-
-      <OutpostModel health={health} isMars={isMars} />
-
-      {/* Subtle auto-look guide */}
+      {/* User Orbit Controls with zoom allowed for interactive inspection */}
       <OrbitControls
-        enableZoom={false}
+        ref={controlsRef}
+        enableZoom={true}
+        minDistance={1.8}
+        maxDistance={7.5}
         enablePan={false}
-        minPolarAngle={Math.PI / 6}
-        maxPolarAngle={Math.PI / 2.1}
-        autoRotate={false}
+        minPolarAngle={Math.PI / 8}
+        maxPolarAngle={Math.PI / 2.05}
       />
     </Canvas>
   );

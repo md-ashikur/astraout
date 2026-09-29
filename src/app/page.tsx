@@ -5,13 +5,14 @@ import dynamic from 'next/dynamic';
 import {
   Zap, Wind, Sprout, BookOpen, Play, Pause,
   ChevronRight, Star, CheckCircle2,
-  Radio, Droplets, Sun, Moon,
+  Radio, Droplets,
   Volume2, VolumeX, Rocket, ArrowRight
 } from 'lucide-react';
-import { OutpostState, OutpostLocation, SimulationSpeed } from '../engine/simulation-types';
+import { OutpostState, OutpostLocation, SimulationSpeed, Astronaut } from '../engine/simulation-types';
 import { tickSimulation } from '../engine/simulation-core';
 import { getInitialScenario } from '../engine/default-scenarios';
 import { soundFx } from '../audio/sound-synthesizer';
+import { CrewManagementModal } from '../components/control-deck/crew-management-modal';
 import type { PlanetSceneProps } from '../components/game-3d/planet-scene';
 import type { PlanetSelectSceneProps } from '../components/game-3d/planet-select-scene';
 import type { MiniOutpostSceneProps } from '../components/game-3d/mini-outpost-scene';
@@ -604,36 +605,62 @@ function LearnModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-// ════════════════════════════════════════════════════════════
-// GAME HUD — Clean minimal version
-// ════════════════════════════════════════════════════════════
+
 function GameHUD({
   state, setState,
   isMuted, setIsMuted,
   onLearn,
+  onExitToMenu,
+  onSelectPlanetScreen,
 }: {
   state: OutpostState;
   setState: React.Dispatch<React.SetStateAction<OutpostState>>;
   isMuted: boolean;
   setIsMuted: (v: boolean) => void;
   onLearn: () => void;
+  onExitToMenu: () => void;
+  onSelectPlanetScreen: () => void;
 }) {
   const { resources, crew, modules } = state;
   const isMoon = state.location === 'moon';
 
   const battPct = (resources.batteryStored / resources.batteryCapacity) * 100;
-
   const co2Bad = resources.co2Level > 2500;
+  const netPower = resources.powerGeneration - resources.powerDemand;
 
-  const [cameraMode, setCameraMode] = useState<'orbit' | 'dome' | 'rover' | 'solar' | 'comms' | 'wide'>('orbit');
-  const [isViewportExpanded, setIsViewportExpanded] = useState(false);
+  const [cameraMode, setCameraMode] = useState<'orbit' | 'dome' | 'greenhouse' | 'rover' | 'solar' | 'comms' | 'wide' | 'crew' | 'lifesupport' | 'tanks' | 'celestial'>('orbit');
+  const [cameraCommand, setCameraCommand] = useState<{ type: string; id: number } | null>(null);
+  const triggerCamera = (type: string) => setCameraCommand({ type, id: Date.now() });
+  const [roverCommand, setRoverCommand] = useState<{ type: string; id: number } | null>(null);
+  const [crewCommand, setCrewCommand] = useState<{ type: string; id: number } | null>(null);
+  const [isCinematicFullscreen, setIsCinematicFullscreen] = useState(false);
   const [inspectedObject, setInspectedObject] = useState<string | null>(null);
-  const surveyCounter = useRef(0);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [showHowToPlay, setShowHowToPlay] = useState(false);
+  const [showLabels, setShowLabels] = useState(false);
+  const [showCrewModal, setShowCrewModal] = useState(false);
+  const [selectedCrewId, setSelectedCrewId] = useState<string | null>(null);
+
+  const handleAssignCrew = (id: string, status: Astronaut['status']) => {
+    soundFx.playClick();
+    setState(prev => ({
+      ...prev,
+      crew: prev.crew.map(c => c.id === id ? { ...c, status } : c),
+    }));
+  };
+
+  const isNight = !state.isDaytime;
+  const solarModule = modules.find(m => m.id === 'solar-array');
+  const fissionModule = modules.find(m => m.id === 'nuclear-fission');
+  const sabatierModule = modules.find(m => m.id === 'sabatier-system');
+  const hasStorm = state.activeHazards.find(h => h.type === 'dust-storm');
+  const hasFlare = state.activeHazards.find(h => h.type === 'solar-flare');
 
   const dispatchRover = () => {
     soundFx.playRoverHorn();
-    surveyCounter.current += 1;
-    const isWater = surveyCounter.current % 2 === 0;
+    setRoverCommand({ type: 'dispatch', id: Date.now() });
+    setCameraMode('rover');
+    const isWater = (state.currentSol + Math.floor(resources.regolithStored)) % 2 === 0;
     const bonus = isWater ? 8 : 6;
     setState(prev => ({
       ...prev,
@@ -646,7 +673,7 @@ function GameHUD({
         id: `rov${Date.now()}`,
         sol: prev.currentSol,
         timeString: `SOL ${prev.currentSol}`,
-        message: `🚜 Rover Survey Expedition Complete: Discovered +${bonus}${isWater ? 'L Ice/Water' : 't Sinterable Regolith'}!`,
+        message: `🚜 Rover returned from crater survey: +${bonus}${isWater ? 'L water ice' : 't sinterable regolith'} secured!`,
         type: 'success' as const,
       }, ...prev.logs].slice(0, 30),
     }));
@@ -698,6 +725,8 @@ function GameHUD({
 
   const saluteCrew = () => {
     soundFx.playBeep(1100, 0.1);
+    setCrewCommand({ type: 'salute', id: Date.now() });
+    setCameraMode('crew');
     setState(prev => ({
       ...prev,
       logs: [{
@@ -721,8 +750,7 @@ function GameHUD({
         logs: [{
           id: `s${Date.now()}`, sol: prev.currentSol, timeString: `SOL ${prev.currentSol}`,
           message: active ? '🚨 ALL CREW TO STORM SHELTER!' : '✅ Shelter stand-down.', type: active ? 'critical' as const : 'success' as const
-        }
-          , ...prev.logs].slice(0, 30),
+        }, ...prev.logs].slice(0, 30),
       };
     });
   };
@@ -741,187 +769,503 @@ function GameHUD({
       logs: [{
         id: `sh${Date.now()}`, sol: prev.currentSol, timeString: `SOL ${prev.currentSol}`,
         message: `🪨 Shield +5cm → ${prev.resources.shieldingThicknessCm + 5}cm (Nanite regolith sintered)`, type: 'success' as const
-      }
-        , ...prev.logs].slice(0, 30),
+      }, ...prev.logs].slice(0, 30),
     }));
   };
 
+  const harvestFood = () => {
+    soundFx.playSuccess();
+    setState(prev => ({
+      ...prev,
+      resources: {
+        ...prev.resources,
+        foodRations: Math.min(120, prev.resources.foodRations + 15),
+      },
+      logs: [{
+        id: `fd${Date.now()}`,
+        sol: prev.currentSol,
+        timeString: `SOL ${prev.currentSol}`,
+        message: '🌱 Harvested +15 units of fresh dwarf wheat & microgreens from Hydroponic Greenhouse!',
+        type: 'success' as const,
+      }, ...prev.logs].slice(0, 30),
+    }));
+  };
+
+  const boostPAR = () => {
+    soundFx.playScanner();
+    setState(prev => ({
+      ...prev,
+      logs: [{
+        id: `par${Date.now()}`,
+        sol: prev.currentSol,
+        timeString: `SOL ${prev.currentSol}`,
+        message: '💡 Greenhouse LED grow spectrum tuned to 660nm deep-red: Photosynthetic efficiency at 100%.',
+        type: 'info' as const,
+      }, ...prev.logs].slice(0, 30),
+    }));
+  };
+
+  const ventCO2 = () => {
+    soundFx.playAirlockHiss();
+    setState(prev => ({
+      ...prev,
+      resources: {
+        ...prev.resources,
+        co2Level: Math.max(350, prev.resources.co2Level - 150),
+      },
+      logs: [{
+        id: `mox${Date.now()}`,
+        sol: prev.currentSol,
+        timeString: `SOL ${prev.currentSol}`,
+        message: '💨 ISRU MOXIE purge valve opened: -150 ppm CO₂ scrubbed & vented.',
+        type: 'success' as const,
+      }, ...prev.logs].slice(0, 30),
+    }));
+  };
+
+  const boostISRU = () => {
+    soundFx.playSuccess();
+    setState(prev => ({
+      ...prev,
+      resources: {
+        ...prev.resources,
+        o2PartialPressure: Math.min(22, prev.resources.o2PartialPressure + 0.5),
+      },
+      logs: [{
+        id: `isru${Date.now()}`,
+        sol: prev.currentSol,
+        timeString: `SOL ${prev.currentSol}`,
+        message: '🧪 Catalytic Sabatier loop boosted: O₂ yield increased by +0.5%.',
+        type: 'info' as const,
+      }, ...prev.logs].slice(0, 30),
+    }));
+  };
+
+  const ventCryoValve = () => {
+    soundFx.playAirlockHiss();
+    setState(prev => ({
+      ...prev,
+      logs: [{
+        id: `cryo${Date.now()}`,
+        sol: prev.currentSol,
+        timeString: `SOL ${prev.currentSol}`,
+        message: '💧 Cryogenic storage manifold pressure relief tested (Nominal: 2.4 bar).',
+        type: 'info' as const,
+      }, ...prev.logs].slice(0, 30),
+    }));
+  };
+
+  const balanceTanks = () => {
+    soundFx.playBeep(720, 0.15);
+    setState(prev => ({
+      ...prev,
+      logs: [{
+        id: `bal${Date.now()}`,
+        sol: prev.currentSol,
+        timeString: `SOL ${prev.currentSol}`,
+        message: '⚖️ Cryogenic LOX & H₂O reservoir cross-feed manifolds equalized.',
+        type: 'success' as const,
+      }, ...prev.logs].slice(0, 30),
+    }));
+  };
+
+  const analyzeBoulder = () => {
+    soundFx.playScanner();
+    setState(prev => ({
+      ...prev,
+      resources: {
+        ...prev.resources,
+        regolithStored: prev.resources.regolithStored + 2,
+      },
+      logs: [{
+        id: `rock${Date.now()}`,
+        sol: prev.currentSol,
+        timeString: `SOL ${prev.currentSol}`,
+        message: '🪨 Regolith boulder Raman spectra complete: +2t mineral feed secured.',
+        type: 'success' as const,
+      }, ...prev.logs].slice(0, 30),
+    }));
+  };
+
+  // ── Smart CAPCOM Advisor Logic ─────────────────────────────
+  let capcomAdvice: {
+    type: 'critical' | 'warning' | 'info' | 'success';
+    badge: string;
+    title: string;
+    actionLabel?: string;
+    action?: () => void;
+  } = {
+    type: 'success',
+    badge: '✅ NOMINAL',
+    title: `All systems nominal on Sol ${state.currentSol}. Ready for surface operations.`,
+    actionLabel: '🚜 DISPATCH ROVER',
+    action: dispatchRover,
+  };
+
+  if (hasFlare && !resources.stormShelterActive) {
+    capcomAdvice = {
+      type: 'critical',
+      badge: '🚨 RADIATION EMERGENCY',
+      title: 'Solar Flare strike detected! High ionizing radiation outside. Move all crew into Storm Shelter!',
+      actionLabel: '🛡️ ALL CREW TO SHELTER',
+      action: toggleShelter,
+    };
+  } else if (hasStorm && !resources.stormShelterActive && !isMoon) {
+    capcomAdvice = {
+      type: 'warning',
+      badge: '🌪️ DUST STORM ACTIVE',
+      title: 'Martian dust storm active! Visibility 10%, solar generation degraded. Secure base & enter shelter!',
+      actionLabel: '🛡️ ENTER STORM SHELTER',
+      action: toggleShelter,
+    };
+  } else if (isNight && netPower < 0 && fissionModule && !fissionModule.isActive) {
+    capcomAdvice = {
+      type: 'critical',
+      badge: '🌙 NIGHT POWER DEFICIT',
+      title: `Night has fallen! Solar arrays are generating 0kW. Battery is draining at ${Math.abs(netPower).toFixed(1)}kW. Turn ON Kilopower Fission Reactor!`,
+      actionLabel: '⚡ ACTIVATE KILOPOWER (+10kW)',
+      action: () => {
+        soundFx.playClick();
+        setState(prev => ({
+          ...prev,
+          modules: prev.modules.map(m => m.id === 'nuclear-fission' ? { ...m, isActive: true } : m)
+        }));
+      },
+    };
+  } else if (!isNight && solarModule && !solarModule.isActive) {
+    capcomAdvice = {
+      type: 'warning',
+      badge: '☀️ DAYLIGHT RESTORED',
+      title: 'Sunlight is high! Turn ON Ultraflex Solar to generate clean +12kW and recharge battery reserves.',
+      actionLabel: '☀️ ACTIVATE SOLAR (+12kW)',
+      action: () => {
+        soundFx.playClick();
+        setState(prev => ({
+          ...prev,
+          modules: prev.modules.map(m => m.id === 'solar-array' ? { ...m, isActive: true } : m)
+        }));
+      },
+    };
+  } else if (resources.co2Level > 1800 && sabatierModule && !sabatierModule.isActive) {
+    capcomAdvice = {
+      type: 'warning',
+      badge: '💨 ELEVATED CO₂',
+      title: `CO₂ is reaching ${resources.co2Level} ppm! Turn ON Sabatier O₂ Reactor to scrub atmosphere and generate oxygen.`,
+      actionLabel: '💨 ACTIVATE SABATIER O₂',
+      action: () => {
+        soundFx.playClick();
+        setState(prev => ({
+          ...prev,
+          modules: prev.modules.map(m => m.id === 'sabatier-system' ? { ...m, isActive: true } : m)
+        }));
+      },
+    };
+  } else if (resources.regolithStored >= 5 && resources.shieldingThicknessCm < 45) {
+    capcomAdvice = {
+      type: 'info',
+      badge: '🪨 REGOLITH READY',
+      title: `${resources.regolithStored.toFixed(0)} tons of regolith available! Sinter shield to strengthen radiation protection.`,
+      actionLabel: '🪨 SINTER SHIELD (+5cm)',
+      action: sinterShield,
+    };
+  } else if (resources.foodRations < 35) {
+    capcomAdvice = {
+      type: 'warning',
+      badge: '🌱 HARVEST CROPS',
+      title: 'Food rations are low! Visit the Hydroponic Greenhouse to harvest fresh crops and replenish crew food reserves.',
+      actionLabel: '🌱 HARVEST FOOD (+15)',
+      action: harvestFood,
+    };
+  }
+
   return (
-    <div className="h-screen w-screen flex flex-col bg-slate-950 overflow-hidden">
-      {/* ── TOP BAR ── */}
-      <header className="shrink-0 flex items-center justify-between px-4 py-2 bg-slate-950/90 border-b border-slate-800/80 backdrop-blur-xl z-20">
-        {/* Logo */}
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-linear-to-br from-cyan-500 to-blue-700 flex items-center justify-center text-base shadow-[0_0_12px_rgba(6,182,212,0.5)]">🚀</div>
-          <div className="hidden sm:block">
-            <div className="text-xs font-black text-white font-mono leading-tight">Junior Astronaut</div>
-            <div className="text-[9px] text-cyan-400 font-mono tracking-widest uppercase">Mission Trainer</div>
+    <div className="h-screen w-screen flex flex-col bg-slate-950 overflow-hidden select-none">
+      {/* ── TOP BAR WITH BACK, CONTROLS, WEATHER & MENU ── */}
+      <header className="shrink-0 flex items-center justify-between px-3 py-2 bg-slate-950/95 border-b border-slate-800/90 backdrop-blur-xl z-30 gap-2">
+        {/* Left: Back / Exit & Logo */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { soundFx.playClick(); setShowExitConfirm(true); }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-mono font-bold transition-all shadow-md group"
+            title="Open Mission Navigation & Exit Menu"
+          >
+            <span className="group-hover:-translate-x-0.5 transition-transform">◀</span>
+            <span>MENU</span>
+          </button>
+
+          <button
+            onClick={() => { soundFx.playBeep(); setShowHowToPlay(true); }}
+            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-cyan-500/40 bg-cyan-950/40 hover:bg-cyan-900/40 text-cyan-300 text-xs font-mono font-bold transition-all shadow-md"
+            title="How to play guide"
+          >
+            <span>❓</span>
+            <span>GUIDE</span>
+          </button>
+
+          <div className="hidden md:flex items-center gap-2 pl-2 border-l border-slate-800">
+            <div className="w-7 h-7 rounded-xl bg-linear-to-br from-cyan-500 to-blue-700 flex items-center justify-center text-sm shadow-[0_0_10px_rgba(6,182,212,0.4)]">🚀</div>
+            <div>
+              <div className="text-[11px] font-black text-white font-mono leading-tight">Junior Astronaut</div>
+              <div className="text-[8px] text-cyan-400 font-mono tracking-widest uppercase">Mission Trainer</div>
+            </div>
           </div>
         </div>
 
-        {/* Center stats */}
+        {/* Center: Mission Sol, Location, Score & Weather */}
         <div className="flex items-center gap-2">
-          {/* Location */}
-          <div className="flex bg-slate-900/80 rounded-xl border border-slate-700/60 p-0.5">
-            <button onClick={() => { soundFx.playClick(); setState(getInitialScenario('moon')); }}
-              className={`px-3 py-1 rounded-lg text-[11px] font-black font-mono transition-all ${isMoon ? 'bg-slate-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}>
+          {/* Planet Switcher */}
+          <div className="flex bg-slate-900/90 rounded-xl border border-slate-700/60 p-0.5 shadow-sm">
+            <button
+              onClick={() => { soundFx.playClick(); setState(getInitialScenario('moon')); }}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-black font-mono transition-all ${isMoon ? 'bg-slate-600 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}
+            >
               🌕 Moon
             </button>
-            <button onClick={() => { soundFx.playClick(); setState(getInitialScenario('mars')); }}
-              className={`px-3 py-1 rounded-lg text-[11px] font-black font-mono transition-all ${!isMoon ? 'bg-red-800 text-white' : 'text-slate-500 hover:text-slate-300'}`}>
+            <button
+              onClick={() => { soundFx.playClick(); setState(getInitialScenario('mars')); }}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-black font-mono transition-all ${!isMoon ? 'bg-red-800 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}
+            >
               🔴 Mars
             </button>
           </div>
 
           {/* Sol */}
-          <div className="bg-slate-900/80 border border-cyan-500/30 px-3 py-1 rounded-xl text-center">
-            <div className="text-[8px] text-slate-400 font-mono uppercase leading-tight">Sol</div>
-            <div className="text-sm font-black text-cyan-400 font-mono leading-tight">{String(state.currentSol).padStart(3, '0')}</div>
+          <div className="bg-slate-900/90 border border-cyan-500/40 px-2.5 py-1 rounded-xl text-center shadow-sm">
+            <div className="text-[7px] text-slate-400 font-mono uppercase leading-tight">Sol</div>
+            <div className="text-xs sm:text-sm font-black text-cyan-400 font-mono leading-tight">{String(state.currentSol).padStart(3, '0')}</div>
           </div>
 
-          {/* Score */}
-          <div className={`px-3 py-1 rounded-xl border text-center font-mono ${state.sustainabilityScore >= 70 ? 'border-emerald-500/40 text-emerald-400' : 'border-red-500/40 text-red-400 animate-pulse'
-            } bg-slate-900/80`}>
-            <div className="text-[8px] uppercase leading-tight">Score</div>
-            <div className="text-sm font-black leading-tight">{state.sustainabilityScore}%</div>
+          {/* Sustainability Score */}
+          <div className={`px-2.5 py-1 rounded-xl border text-center font-mono shadow-sm bg-slate-900/90 ${
+            state.sustainabilityScore >= 70 ? 'border-emerald-500/50 text-emerald-400' : 'border-red-500/50 text-red-400 animate-pulse'
+          }`}>
+            <div className="text-[7px] uppercase leading-tight">Score</div>
+            <div className="text-xs sm:text-sm font-black leading-tight">{state.sustainabilityScore}%</div>
           </div>
 
-          {/* Day/Night */}
-          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-black font-mono ${state.isDaytime ? 'text-amber-300 bg-amber-950/40 border border-amber-700/40' : 'text-indigo-300 bg-indigo-950/40 border border-indigo-700/40'
-            }`}>
-            {state.isDaytime ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-            <span className="hidden sm:inline">{state.isDaytime ? 'Day' : 'Night'}</span>
+          {/* Dynamic Weather & Condition Pill */}
+          <div className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-black font-mono border shadow-sm ${
+            hasFlare
+              ? 'bg-red-950/80 border-red-500 text-red-300 animate-pulse'
+              : hasStorm
+              ? 'bg-amber-950/80 border-amber-500 text-amber-300 animate-pulse'
+              : isNight
+              ? 'bg-indigo-950/60 border-indigo-500/40 text-indigo-300'
+              : 'bg-amber-950/40 border-amber-600/40 text-amber-300'
+          }`}>
+            <span>
+              {hasFlare
+                ? '☀️ FLARE (1.4 mSv/h)'
+                : hasStorm
+                ? '🌪️ DUST STORM'
+                : isNight
+                ? '🌙 CRYOGENIC NIGHT'
+                : '☀️ NOON SUNLIGHT'}
+            </span>
           </div>
         </div>
 
-        {/* Controls */}
+        {/* Right: Simulation Speed, Audio & Cadet Guide */}
         <div className="flex items-center gap-1.5">
-          <button onClick={() => { soundFx.playClick(); setState(prev => ({ ...prev, isPaused: !prev.isPaused })); }}
-            className={`p-2 rounded-xl border text-xs font-black transition-all ${state.isPaused ? 'bg-amber-600 border-amber-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'}`}>
+          <button
+            onClick={() => { soundFx.playClick(); setState(prev => ({ ...prev, isPaused: !prev.isPaused })); }}
+            className={`p-1.5 sm:p-2 rounded-xl border text-xs font-black transition-all ${
+              state.isPaused ? 'bg-amber-600 border-amber-400 text-white shadow-[0_0_10px_rgba(245,158,11,0.5)]' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+            }`}
+            title={state.isPaused ? 'Resume Simulation' : 'Pause Simulation'}
+          >
             {state.isPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
           </button>
 
           {([1, 2, 5] as SimulationSpeed[]).map(s => (
-            <button key={s} onClick={() => { soundFx.playClick(); setState(prev => ({ ...prev, speed: s, isPaused: false })); }}
-              className={`px-2 py-1 rounded-xl text-[11px] font-black font-mono border transition-all ${state.speed === s && !state.isPaused ? 'bg-cyan-600 border-cyan-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
-                }`}>
+            <button
+              key={s}
+              onClick={() => { soundFx.playClick(); setState(prev => ({ ...prev, speed: s, isPaused: false })); }}
+              className={`px-2 py-1 rounded-xl text-[10px] font-black font-mono border transition-all ${
+                state.speed === s && !state.isPaused ? 'bg-cyan-600 border-cyan-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
+              }`}
+            >
               {s}×
             </button>
           ))}
 
-          <button onClick={() => setIsMuted(soundFx.toggleMute())} className="p-2 rounded-xl border border-slate-700 bg-slate-800/80 text-slate-400 hover:text-white">
+          <button
+            onClick={() => setIsMuted(soundFx.toggleMute())}
+            className="p-1.5 sm:p-2 rounded-xl border border-slate-700 bg-slate-800/80 text-slate-400 hover:text-white"
+            title="Toggle Audio FX"
+          >
             {isMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
           </button>
 
-          <button onClick={onLearn} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-linear-to-r from-blue-600 to-cyan-600 text-white text-[11px] font-black font-mono hover:scale-105 shadow-[0_0_12px_rgba(6,182,212,0.4)] transition-all">
-            <BookOpen className="w-3.5 h-3.5" />
+          <button
+            onClick={onLearn}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-linear-to-r from-blue-600 to-cyan-600 text-white text-[10px] font-black font-mono hover:scale-105 shadow-[0_0_12px_rgba(6,182,212,0.4)] transition-all"
+          >
+            <BookOpen className="w-3 h-3" />
             <span className="hidden sm:inline">LEARN</span>
           </button>
         </div>
       </header>
 
+      {/* ── NASA CAPCOM FLIGHT DIRECTOR ADVISOR BANNER ── */}
+      <div className={`shrink-0 px-3 sm:px-4 py-2 border-b flex items-center justify-between gap-3 text-xs font-mono transition-all z-20 ${
+        capcomAdvice.type === 'critical'
+          ? 'bg-red-950/95 border-red-500/70 text-red-200 animate-pulse shadow-[0_0_30px_rgba(239,68,68,0.3)]'
+          : capcomAdvice.type === 'warning'
+          ? 'bg-amber-950/90 border-amber-500/60 text-amber-200 shadow-[0_0_20px_rgba(245,158,11,0.2)]'
+          : capcomAdvice.type === 'info'
+          ? 'bg-blue-950/90 border-blue-500/60 text-blue-200'
+          : 'bg-slate-900/90 border-slate-700/60 text-slate-300'
+      }`}>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className={`px-2 py-0.5 rounded-md font-black text-[9px] uppercase tracking-wider shrink-0 ${
+            capcomAdvice.type === 'critical' ? 'bg-red-600 text-white' : capcomAdvice.type === 'warning' ? 'bg-amber-600 text-white' : 'bg-cyan-600 text-white'
+          }`}>
+            {capcomAdvice.badge}
+          </span>
+          <span className="truncate font-semibold text-[11px] sm:text-xs">
+            {capcomAdvice.title}
+          </span>
+        </div>
+
+        {capcomAdvice.actionLabel && capcomAdvice.action && (
+          <button
+            onClick={() => {
+              soundFx.playClick();
+              capcomAdvice.action?.();
+            }}
+            className="shrink-0 px-3 py-1 rounded-xl bg-linear-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-black text-[10px] sm:text-[11px] shadow-md transition-all flex items-center gap-1.5"
+          >
+            <span>{capcomAdvice.actionLabel}</span>
+            <ArrowRight className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+
       {/* ── MAIN AREA ── */}
       <div className="flex-1 flex overflow-hidden relative">
+        {/* Deep Space Background Atmosphere */}
+        <div className="absolute inset-0 z-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900/40 via-slate-950 to-black pointer-events-none" />
 
-        {/* 3D Planet Background */}
-        <div className="absolute inset-0 z-0">
-          <Suspense fallback={<div className="w-full h-full bg-slate-950" />}>
-            <PlanetScene location={state.location} />
-          </Suspense>
-        </div>
-        <div className="absolute inset-0 z-0 bg-linear-to-b from-slate-950/30 via-transparent to-slate-950/80 pointer-events-none" />
+        {/* ─── LEFT: Gauges & Systems (Collapsible on Cinematic) ─── */}
+        {!isCinematicFullscreen && (
+          <div className="relative z-10 w-52 shrink-0 flex flex-col gap-2 p-3 bg-slate-950/75 backdrop-blur-xl border-r border-slate-800/80 overflow-y-auto">
+            <div className="text-[9px] font-black text-cyan-400 font-mono uppercase tracking-widest mb-1 flex items-center justify-between">
+              <span>Systems</span>
+              <span className="text-[8px] text-slate-500">{isMoon ? 'LUNAR BASE' : 'MARS BASE'}</span>
+            </div>
 
-        {/* ─── LEFT: Gauges ─── */}
-        <div className="relative z-10 w-52 shrink-0 flex flex-col gap-2 p-3 bg-slate-950/60 backdrop-blur-lg border-r border-slate-800/60 overflow-y-auto">
-          <div className="text-[9px] font-black text-cyan-400 font-mono uppercase tracking-widest mb-1">Systems</div>
-
-          {/* Power block */}
-          <div className={`p-3 rounded-2xl border backdrop-blur-sm ${battPct < 15 ? 'bg-red-950/60 border-red-400/60 animate-pulse' : 'bg-slate-900/60 border-slate-700/60'}`}>
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-1.5">
-                <Zap className="w-3.5 h-3.5 text-amber-400" />
-                <span className="text-[10px] font-black text-slate-200 font-mono">Power</span>
+            {/* Power block */}
+            <div className={`p-3 rounded-2xl border backdrop-blur-sm ${
+              netPower < 0 ? 'bg-red-950/70 border-red-500/70 animate-pulse' : 'bg-slate-900/60 border-slate-700/60'
+            }`}>
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="text-[10px] font-black text-slate-200 font-mono">Power</span>
+                </div>
+                <span className={`text-[10px] font-black font-mono ${netPower >= 0 ? 'text-emerald-400' : 'text-red-400 font-black'}`}>
+                  {netPower >= 0 ? '+' : ''}{netPower.toFixed(1)}kW
+                </span>
               </div>
-              <span className={`text-[10px] font-black font-mono ${resources.powerGeneration >= resources.powerDemand ? 'text-emerald-400' : 'text-red-400'}`}>
-                {resources.powerGeneration >= resources.powerDemand ? '+' : ''}{(resources.powerGeneration - resources.powerDemand).toFixed(1)}kW
+              <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-700 ${
+                    battPct < 15 ? 'bg-red-500' : battPct < 40 ? 'bg-amber-400' : 'bg-emerald-400'
+                  }`}
+                  style={{ width: `${battPct}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[9px] font-mono mt-1">
+                <span className={netPower < 0 ? 'text-red-400 font-bold' : 'text-slate-400'}>
+                  {netPower < 0 ? '⚠️ Draining' : 'Charging'}
+                </span>
+                <span className="text-slate-400">{battPct.toFixed(0)}% battery</span>
+              </div>
+            </div>
+
+            {/* Icon gauges grid */}
+            <div className="grid grid-cols-2 gap-2.5 p-2.5 bg-slate-900/60 border border-slate-700/60 rounded-2xl backdrop-blur-sm">
+              <IconGauge icon={<Wind className="w-4 h-4" />} label="O₂" value={resources.o2PartialPressure} max={21} color="#22d3ee" critical={85} warning={90} />
+              <IconGauge icon={<Droplets className="w-4 h-4" />} label="H₂O" value={resources.waterReserve} max={resources.waterCapacity} color="#38bdf8" critical={15} warning={30} />
+              <IconGauge icon={<Sprout className="w-4 h-4" />} label="Food" value={resources.foodRations} max={120} color="#34d399" critical={15} warning={25} />
+              <IconGauge icon={<Radio className="w-4 h-4" />} label="Shield" value={resources.shieldingThicknessCm} max={50} color="#a78bfa" warning={50} />
+            </div>
+
+            {/* CO2 alert */}
+            <div className={`p-2 rounded-xl border flex items-center justify-between ${
+              co2Bad ? 'bg-red-950/70 border-red-500 animate-pulse' : 'bg-slate-900/60 border-slate-700/60'
+            }`}>
+              <span className="text-[10px] font-mono text-slate-300">CO₂ Level</span>
+              <span className={`text-[11px] font-black font-mono ${co2Bad ? 'text-red-400' : resources.co2Level > 1800 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                {resources.co2Level} ppm
               </span>
             </div>
-            <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
-              <div className={`h-full rounded-full transition-all duration-700 ${battPct < 15 ? 'bg-red-500' : battPct < 40 ? 'bg-amber-400' : 'bg-emerald-400'}`}
-                style={{ width: `${battPct}%` }} />
+
+            {/* Modules power toggles with intuitive night status */}
+            <div className="text-[9px] font-black text-amber-400 font-mono uppercase tracking-widest mt-1 mb-0.5">
+              Power Modules
             </div>
-            <div className="text-[9px] font-mono text-slate-500 mt-1">{battPct.toFixed(0)}% battery</div>
-          </div>
+            <div className="space-y-1">
+              {modules.slice(0, 7).map(mod => {
+                const isSolar = mod.id === 'solar-array';
+                const isFission = mod.id === 'nuclear-fission';
+                const needsFission = isNight && isFission && !mod.isActive;
 
-          {/* Icon gauges grid */}
-          <div className="grid grid-cols-2 gap-3 p-3 bg-slate-900/60 border border-slate-700/60 rounded-2xl backdrop-blur-sm">
-            <IconGauge icon={<Wind className="w-4 h-4" />} label="O₂" value={resources.o2PartialPressure} max={21} color="#22d3ee" critical={85} warning={90} />
-            <IconGauge icon={<Droplets className="w-4 h-4" />} label="H₂O" value={resources.waterReserve} max={resources.waterCapacity} color="#38bdf8" critical={15} warning={30} />
-            <IconGauge icon={<Sprout className="w-4 h-4" />} label="Food" value={resources.foodRations} max={120} color="#34d399" critical={15} warning={25} />
-            <IconGauge icon={<Radio className="w-4 h-4" />} label="Shield" value={resources.shieldingThicknessCm} max={50} color="#a78bfa" warning={50} />
-          </div>
+                return (
+                  <button
+                    key={mod.id}
+                    onClick={() => {
+                      soundFx.playClick();
+                      setState(prev => ({
+                        ...prev,
+                        modules: prev.modules.map(m => m.id === mod.id ? { ...m, isActive: !m.isActive } : m)
+                      }));
+                    }}
+                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl border text-[10px] font-mono transition-all ${
+                      needsFission
+                        ? 'bg-amber-950/80 border-amber-400 text-amber-200 animate-pulse shadow-[0_0_10px_rgba(245,158,11,0.4)]'
+                        : mod.isActive
+                        ? 'bg-slate-900/80 border-emerald-500/30 text-slate-200 hover:border-amber-500/50'
+                        : 'bg-slate-950/60 border-slate-800 text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 truncate">
+                      <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                        mod.isActive ? 'bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.8)]' : 'bg-slate-600'
+                      }`} />
+                      <span className="truncate">{mod.name.split(' ').slice(0, 2).join(' ')}</span>
+                    </div>
 
-          {/* CO2 alert */}
-          <div className={`p-2.5 rounded-xl border flex items-center justify-between ${co2Bad ? 'bg-red-950/60 border-red-400 animate-pulse' : 'bg-slate-900/60 border-slate-700/60'}`}>
-            <span className="text-[10px] font-mono text-slate-300">CO₂</span>
-            <span className={`text-[11px] font-black font-mono ${co2Bad ? 'text-red-400' : resources.co2Level > 1500 ? 'text-amber-400' : 'text-emerald-400'}`}>
-              {resources.co2Level} ppm
-            </span>
-          </div>
-
-          {/* Modules power toggles */}
-          <div className="text-[9px] font-black text-amber-400 font-mono uppercase tracking-widest mt-1 mb-0.5">Modules</div>
-          <div className="space-y-1">
-            {modules.slice(0, 7).map(mod => (
-              <button key={mod.id} onClick={() => { soundFx.playClick(); setState(prev => ({ ...prev, modules: prev.modules.map(m => m.id === mod.id ? { ...m, isActive: !m.isActive } : m) })); }}
-                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl border text-[10px] font-mono transition-all ${mod.isActive ? 'bg-slate-900/80 border-emerald-500/25 text-slate-200 hover:border-amber-500/40' : 'bg-slate-950/60 border-slate-800 text-slate-500'
-                  }`}>
-                <div className="flex items-center gap-1.5 truncate">
-                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${mod.isActive ? 'bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.8)]' : 'bg-slate-600'}`} />
-                  <span className="truncate">{mod.name.split(' ').slice(0, 2).join(' ')}</span>
-                </div>
-                <span className={`shrink-0 font-black ${mod.powerConsumption < 0 ? 'text-emerald-400' : 'text-amber-300'}`}>
-                  {mod.powerConsumption > 0 ? '-' : '+'}{Math.abs(mod.powerConsumption)}kW
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* ─── CENTER: 3D Outpost ─── */}
-        <div className="flex-1 flex flex-col items-center justify-center relative z-10 p-3 gap-2 overflow-hidden">
-          {/* Active hazard banner */}
-          {state.activeHazards[0] && (
-            <div className="w-full max-w-lg bg-red-950/90 border border-red-400 rounded-2xl px-4 py-2 backdrop-blur-xl flex items-center gap-3 shadow-[0_0_30px_rgba(239,68,68,0.4)] animate-pulse shrink-0">
-              <span className="text-2xl">{state.activeHazards[0].type === 'solar-flare' ? '☀️' : '🌪️'}</span>
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-black text-red-200 font-mono">{state.activeHazards[0].title}</div>
-                <div className="text-[10px] text-red-400 font-mono truncate">{state.activeHazards[0].nasaRemedy}</div>
-              </div>
-              <button onClick={toggleShelter} className="shrink-0 px-3 py-1.5 bg-red-600 hover:bg-red-500 rounded-xl text-white text-[10px] font-black font-mono transition-all">
-                SHELTER!
-              </button>
+                    <span className={`shrink-0 font-black ${
+                      isSolar && isNight
+                        ? 'text-amber-400'
+                        : mod.powerConsumption < 0
+                        ? 'text-emerald-400'
+                        : 'text-amber-300'
+                    }`}>
+                      {isSolar && isNight ? '0kW (Night)' : `${mod.powerConsumption > 0 ? '-' : '+'}${Math.abs(mod.powerConsumption)}kW`}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Outpost Title & Cam Bar */}
-          <div className="flex flex-col items-center gap-1.5 shrink-0">
-            <div className="text-center">
-              <h2 className="text-base sm:text-lg font-black font-mono text-white drop-shadow-lg flex items-center gap-2">
-                <span>{isMoon ? '🌕 ARTEMIS BASE ALPHA' : '🔴 ARES OUTPOST PRIME'}</span>
-                <span className="text-[9px] px-2 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-500/40 text-cyan-300">
-                  {isMoon ? 'Shackleton Crater' : 'Jezero Crater'}
-                </span>
-              </h2>
-            </div>
-
-            {/* Interactive 3D Camera Controls Bar */}
-            <div className="flex items-center gap-1 p-1 bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-700/60 shadow-lg text-[10px] font-mono">
+        {/* ─── CENTER: Massive Immersive 3D Outpost (Dominant Screen Area) ─── */}
+        <div className="flex-1 flex flex-col relative z-10 p-2 sm:p-3 overflow-hidden">
+          {/* Top Camera Controls Overlay */}
+          <div className="flex items-center justify-between mb-2 z-20 gap-2 flex-wrap sm:flex-nowrap">
+            {/* View presets */}
+            <div className="flex items-center gap-1 p-1 bg-slate-950/85 backdrop-blur-md rounded-2xl border border-slate-700/60 shadow-lg text-[10px] font-mono">
               <span className="text-[9px] text-cyan-400 font-bold px-1.5 uppercase tracking-wider hidden sm:inline">VIEW:</span>
               {[
                 { id: 'orbit', label: '🌐 Orbit' },
                 { id: 'dome', label: '🏠 Habitat' },
+                { id: 'greenhouse', label: '🌱 Crops' },
                 { id: 'rover', label: '🚜 Rover' },
+                { id: 'crew', label: '👨‍🚀 Crew' },
                 { id: 'solar', label: '⚡ Solar' },
                 { id: 'comms', label: '📡 Comms' },
                 { id: 'wide', label: '🌌 Wide' },
@@ -941,202 +1285,633 @@ function GameHUD({
                   {cam.label}
                 </button>
               ))}
-              <div className="h-4 w-px bg-slate-700/60 mx-1" />
+            </div>
+
+            {/* Quick 360° Rotate & Zoom Bar + Fullscreen */}
+            <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0.5 p-1 bg-slate-950/85 backdrop-blur-md rounded-2xl border border-slate-700/60 shadow-lg text-[10px] font-mono">
+                <button
+                  onClick={() => { soundFx.playClick(); triggerCamera('rotateLeft'); }}
+                  className="px-2 py-1 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 transition-all font-bold"
+                  title="Rotate Camera Left 45°"
+                >
+                  ↺ 45°
+                </button>
+                <button
+                  onClick={() => { soundFx.playClick(); triggerCamera('rotateRight'); }}
+                  className="px-2 py-1 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 transition-all font-bold"
+                  title="Rotate Camera Right 45°"
+                >
+                  ↻ 45°
+                </button>
+                <div className="w-px h-3 bg-slate-700 mx-0.5" />
+                <button
+                  onClick={() => { soundFx.playClick(); triggerCamera('zoomIn'); }}
+                  className="px-2 py-1 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 transition-all font-bold"
+                  title="Zoom In Closer"
+                >
+                  ➕ Zoom
+                </button>
+                <button
+                  onClick={() => { soundFx.playClick(); triggerCamera('zoomOut'); }}
+                  className="px-2 py-1 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 transition-all font-bold"
+                  title="Zoom Out"
+                >
+                  ➖ Zoom
+                </button>
+                <button
+                  onClick={() => { soundFx.playClick(); setCameraMode('orbit'); triggerCamera('reset'); }}
+                  className="px-2 py-1 rounded-xl text-cyan-400 hover:text-cyan-300 hover:bg-slate-800 transition-all font-bold"
+                  title="Reset to Orbit View"
+                >
+                  🎯 Reset
+                </button>
+              </div>
+
+              {/* HUD Labels Toggle Button */}
               <button
                 onClick={() => {
                   soundFx.playClick();
-                  setIsViewportExpanded(prev => !prev);
+                  setShowLabels(prev => !prev);
                 }}
-                className="px-2.5 py-1 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-cyan-300 border border-slate-700 transition-all font-bold"
+                className={`px-2.5 py-1.5 rounded-2xl border font-mono text-[10px] font-bold shadow-lg transition-all flex items-center gap-1 shrink-0 cursor-pointer ${
+                  showLabels
+                    ? 'bg-amber-500/25 text-amber-300 border-amber-400/50 shadow-[0_0_12px_rgba(245,158,11,0.3)]'
+                    : 'bg-slate-900/90 hover:bg-slate-800 text-slate-300 border-slate-700'
+                }`}
+                title="Toggle 3D Floating Popup HUDs (Default: Clean view, popups on hover)"
               >
-                {isViewportExpanded ? '⊟ Normal' : '⛶ Expand'}
+                <span>{showLabels ? '🏷️ Popups: ALL' : '🏷️ Popups: HOVER'}</span>
+              </button>
+
+              {/* Cinematic Fullscreen Toggle Button */}
+              <button
+                onClick={() => {
+                  soundFx.playClick();
+                  setIsCinematicFullscreen(prev => !prev);
+                }}
+                className="px-3 py-1.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800 text-cyan-300 border border-slate-700 font-mono text-[10px] font-bold shadow-lg transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+              >
+                <span>{isCinematicFullscreen ? '⊟ Exit Cinema' : '⛶ Fullscreen 3D'}</span>
               </button>
             </div>
           </div>
 
-          {/* 3D Outpost Viewport */}
-          <div
-            className={`relative transition-all duration-500 ease-out ${
-              isViewportExpanded
-                ? 'w-full max-w-4xl h-[420px] sm:h-[480px] z-30'
-                : 'w-72 h-72 sm:w-96 sm:h-96'
-            }`}
-          >
-            <div className="absolute inset-0 rounded-3xl overflow-hidden border border-cyan-500/30 bg-slate-950/40 backdrop-blur-sm shadow-[0_0_50px_rgba(6,182,212,0.2)]">
-              <Suspense
-                fallback={
-                  <div className="w-full h-full flex items-center justify-center">
-                    <div className="text-5xl animate-spin">🚀</div>
-                  </div>
-                }
-              >
-                <MiniOutpostScene
-                  health={state.sustainabilityScore}
-                  isMars={!isMoon}
-                  activeHazard={state.activeHazards[0]?.type || null}
-                  shieldActive={resources.stormShelterActive}
-                  shieldThickness={resources.shieldingThicknessCm}
-                  cameraMode={cameraMode}
-                  onInspect={(obj) => {
-                    setInspectedObject(obj);
-                    if (obj === 'rover') setCameraMode('rover');
-                    else if (obj === 'dome') setCameraMode('dome');
-                    else if (obj === 'solar') setCameraMode('solar');
-                    else if (obj === 'antenna') setCameraMode('comms');
-                  }}
-                />
-              </Suspense>
+          {/* Full-size 3D Canvas Viewport */}
+          <div className="flex-1 w-full h-full min-h-[360px] sm:min-h-[460px] rounded-3xl overflow-hidden border border-cyan-500/30 bg-slate-950/40 backdrop-blur-sm shadow-[0_0_50px_rgba(6,182,212,0.15)] relative">
+            <Suspense
+              fallback={
+                <div className="w-full h-full flex items-center justify-center bg-slate-950">
+                  <div className="text-5xl animate-spin">🚀</div>
+                </div>
+              }
+            >
+              <MiniOutpostScene
+                health={state.sustainabilityScore}
+                isMars={!isMoon}
+                isDaytime={state.isDaytime}
+                activeHazard={state.activeHazards[0]?.type || null}
+                shieldActive={resources.stormShelterActive}
+                shieldThickness={resources.shieldingThicknessCm}
+                foodRations={resources.foodRations}
+                cameraMode={cameraMode}
+                cameraCommand={cameraCommand}
+                roverCommand={roverCommand}
+                crewCommand={crewCommand}
+                showLabels={showLabels}
+                crew={state.crew}
+                selectedCrewId={selectedCrewId}
+                onSelectCrew={(id) => {
+                  setSelectedCrewId(id);
+                  setInspectedObject(`crew-${id}`);
+                  setCameraMode('crew');
+                }}
+                onInspect={(obj) => {
+                  setInspectedObject(obj);
+                  if (obj === 'rover') setCameraMode('rover');
+                  else if (obj === 'dome') setCameraMode('dome');
+                  else if (obj === 'greenhouse') setCameraMode('greenhouse');
+                  else if (obj === 'solar') setCameraMode('solar');
+                  else if (obj === 'antenna') setCameraMode('comms');
+                  else if (obj === 'crew' || obj.startsWith('crew')) setCameraMode('crew');
+                  else if (obj === 'lifesupport') setCameraMode('lifesupport');
+                  else if (obj === 'tanks') setCameraMode('tanks');
+                  else if (obj === 'celestial') setCameraMode('celestial');
+                }}
+              />
+            </Suspense>
 
-              {/* In-viewport subtle user guide hint */}
-              <div className="absolute bottom-2 left-3 text-[9px] font-mono text-slate-400 bg-slate-950/70 px-2 py-0.5 rounded-full border border-slate-800/80 pointer-events-none">
-                💡 Drag to rotate • Scroll to zoom • Click 3D objects
-              </div>
+            {/* Bottom guide tooltip */}
+            <div className="absolute bottom-3 left-3 text-[9px] font-mono text-slate-300 bg-slate-950/80 px-2.5 py-1 rounded-full border border-slate-700/80 backdrop-blur-md pointer-events-none shadow-md">
+              💡 Left Click & Drag for 360° Orbit • Click any Outpost Module, Rover, Astronaut, Earth/Phobos or Rock
             </div>
-
-            {/* Orbit rings decorative */}
-            <div className="absolute -inset-4 rounded-full border border-cyan-500/10 pointer-events-none" />
           </div>
 
-          {/* Interactive 3D Object Inspection Telemetry Card */}
-          {inspectedObject && (
-            <div className="w-full max-w-md bg-slate-900/90 border border-cyan-500/50 rounded-2xl p-3 backdrop-blur-xl shadow-[0_0_30px_rgba(6,182,212,0.25)] flex items-center justify-between gap-3 animate-in fade-in zoom-in-95 duration-200">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">
-                  {inspectedObject === 'rover' ? '🚜' : inspectedObject === 'dome' ? '🏠' : inspectedObject === 'solar' ? '⚡' : inspectedObject === 'antenna' ? '📡' : '👨‍🚀'}
-                </span>
-                <div>
-                  <div className="text-xs font-black font-mono text-white uppercase">
-                    {inspectedObject === 'rover' ? 'Surface Patrol Rover' : inspectedObject === 'dome' ? 'Pressurized Habitation Dome' : inspectedObject === 'solar' ? 'Ultraflex Solar Array' : inspectedObject === 'antenna' ? 'High-Gain Deep Space Antenna' : 'Surface EVA Astronaut'}
-                  </div>
-                  <div className="text-[10px] font-mono text-cyan-400">
-                    {inspectedObject === 'rover' ? 'Telemetry: Patrol Route Active • 100% Battery' : inspectedObject === 'dome' ? `Internal: 101.3 kPa • O₂ ${resources.o2PartialPressure.toFixed(1)}%` : inspectedObject === 'solar' ? `Generating: +${resources.powerGeneration.toFixed(1)}kW clean power` : inspectedObject === 'antenna' ? (isMoon ? 'Earth direct line: 1.3s delay' : 'DSN relay: 14.2m delay') : 'Suit O₂ 95% • Pressure Nominal'}
+          {/* Interactive 3D Object Inspection Card */}
+          {inspectedObject && (() => {
+            const inspectedCrewMember = (inspectedObject === 'crew' || inspectedObject.startsWith('crew-'))
+              ? (crew.find(c => c.id === (inspectedObject === 'crew' ? (selectedCrewId || 'elena') : inspectedObject.replace('crew-', ''))) || crew[0])
+              : null;
+
+            return (
+              <div className="mt-2 w-full bg-slate-900/95 border border-cyan-500/60 rounded-2xl p-3 backdrop-blur-2xl shadow-[0_0_35px_rgba(6,182,212,0.3)] flex items-center justify-between gap-3 animate-in fade-in zoom-in-95 duration-200 shrink-0">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="text-3xl shrink-0">
+                    {inspectedCrewMember
+                      ? inspectedCrewMember.avatar
+                      : inspectedObject === 'rover'
+                      ? '🚜'
+                      : inspectedObject === 'dome'
+                      ? '🏠'
+                      : inspectedObject === 'greenhouse'
+                      ? '🌱'
+                      : inspectedObject === 'solar'
+                      ? '⚡'
+                      : inspectedObject === 'antenna'
+                      ? '📡'
+                      : inspectedObject === 'lifesupport'
+                      ? '🧪'
+                      : inspectedObject === 'tanks'
+                      ? '🛢️'
+                      : inspectedObject === 'shield'
+                      ? '🛡️'
+                      : inspectedObject === 'celestial'
+                      ? (isMoon ? '🌍' : '🔴')
+                      : inspectedObject === 'lights'
+                      ? '💡'
+                      : inspectedObject === 'boulder'
+                      ? '🪨'
+                      : '👨‍🚀'}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-xs font-black font-mono text-white uppercase flex items-center gap-2 flex-wrap">
+                      {inspectedCrewMember ? (
+                        <>
+                          <span className="text-cyan-200 font-extrabold">{inspectedCrewMember.name}</span>
+                          <span className="px-1.5 py-0.5 rounded-md bg-cyan-950 border border-cyan-500/50 text-cyan-300 text-[9px] font-mono font-bold tracking-wider">
+                            {inspectedCrewMember.role}
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-normal">
+                            ({inspectedCrewMember.status === 'sheltered' ? 'In Shelter' : inspectedCrewMember.status === 'incapacitated' ? 'Incapacitated' : 'EVA Station'})
+                          </span>
+                        </>
+                      ) : inspectedObject === 'rover'
+                        ? 'Surface Patrol Rover'
+                        : inspectedObject === 'dome'
+                        ? 'Pressurized Habitation Dome'
+                        : inspectedObject === 'greenhouse'
+                        ? 'Bio-Regenerative Hydroponic Greenhouse'
+                        : inspectedObject === 'solar'
+                        ? 'Ultraflex Solar Array'
+                        : inspectedObject === 'antenna'
+                        ? 'High-Gain Deep Space Antenna'
+                        : inspectedObject === 'lifesupport'
+                        ? 'ISRU Atmosphere Processor & MOXIE'
+                        : inspectedObject === 'tanks'
+                        ? 'Cryogenic LOX & Water Reservoirs'
+                        : inspectedObject === 'shield'
+                        ? 'Sinter-Shield Nanite Deflection Grid'
+                        : inspectedObject === 'celestial'
+                        ? (isMoon ? 'Earth - Houston Mission Control Direct Link' : 'Phobos Mars Reconnaissance Relay')
+                        : inspectedObject === 'lights'
+                        ? 'Outpost Perimeter Mast Floodlights'
+                        : inspectedObject === 'boulder'
+                        ? 'Basaltic Regolith Sample Deposit'
+                        : 'Surface EVA Astronaut'}
+                    </div>
+                    <div className="text-[10px] font-mono text-cyan-400 truncate">
+                      {inspectedCrewMember
+                        ? `Duty: ${inspectedCrewMember.specialtySkill} • Health: ${inspectedCrewMember.health}% • Morale: ${inspectedCrewMember.morale}% • Radiation: ${inspectedCrewMember.radiationDose.toFixed(1)} mSv`
+                        : inspectedObject === 'rover'
+                        ? 'Status: Ready to deploy on crater resource survey'
+                        : inspectedObject === 'dome'
+                        ? `Internal Atmosphere: 101.3 kPa • O₂ ${resources.o2PartialPressure.toFixed(1)}% nominal`
+                        : inspectedObject === 'greenhouse'
+                        ? `Crops: Dwarf Wheat & Martian Microgreens • LED PAR: 450 μmol/m²/s • Current Store: ${resources.foodRations.toFixed(0)} rations`
+                        : inspectedObject === 'solar'
+                        ? (isNight ? 'Array Status: Parked (Night - 0kW)' : `Generating: +${resources.powerGeneration.toFixed(1)}kW clean power`)
+                        : inspectedObject === 'antenna'
+                        ? (isMoon ? 'Ground Station: Houston Direct Link (1.3s delay)' : 'Deep Space Network Relay: Canberra (14.2m delay)')
+                        : inspectedObject === 'lifesupport'
+                        ? `Sabatier Catalyst: 98.4% efficiency • O₂ Yield: +12.4 g/hr • CO₂ Level: ${resources.co2Level.toFixed(0)} ppm`
+                        : inspectedObject === 'tanks'
+                        ? `Tank A (H₂O): ${resources.waterReserve.toFixed(1)}L / ${resources.waterCapacity}L • Tank B (Liquid O₂): 90K Cryogenic`
+                        : inspectedObject === 'shield'
+                        ? `Thickness: ${resources.shieldingThicknessCm}cm Nanite Sintered • Status: ${resources.stormShelterActive ? 'MAX DEFLECTION' : 'STANDBY'}`
+                        : inspectedObject === 'celestial'
+                        ? (isMoon ? 'Apollo Horizon Link: 1.28s light delay • DSN Goldstone 34m Beam' : 'Mars Orbiter UHF Relay: 14m 18s light delay')
+                        : inspectedObject === 'lights'
+                        ? 'High-mast LED array • Lumens: 48,000 lm • Horizon Coverage: 120m'
+                        : inspectedObject === 'boulder'
+                        ? 'Composition: 84% Silicates, 12% Ilmenite (Titanium-Iron Oxide), 4% Volatiles'
+                        : 'Suit Pressure: 29.6 kPa • O₂ Reserves 95%'}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="flex items-center gap-1.5 shrink-0">
-                {inspectedObject === 'rover' && (
+                <div className="flex items-center gap-2 shrink-0">
+                  {inspectedObject === 'greenhouse' && (
+                    <>
+                      <button
+                        onClick={harvestFood}
+                        className="px-3 py-1.5 rounded-xl bg-linear-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white text-[10px] font-mono font-black shadow-md transition-all flex items-center gap-1 cursor-pointer active:scale-95"
+                      >
+                        <span>🌱 HARVEST</span>
+                        <span className="text-emerald-200">(+15)</span>
+                      </button>
+                      <button
+                        onClick={boostPAR}
+                        className="px-3 py-1.5 rounded-xl bg-cyan-700 hover:bg-cyan-600 text-white text-[10px] font-mono font-black shadow-md transition-all cursor-pointer active:scale-95"
+                      >
+                        💡 BOOST PAR
+                      </button>
+                    </>
+                  )}
+                  {inspectedObject === 'rover' && (
+                    <button
+                      onClick={dispatchRover}
+                      className="px-3 py-1.5 rounded-xl bg-linear-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white text-[10px] font-mono font-black shadow-md transition-all cursor-pointer active:scale-95"
+                    >
+                      DISPATCH SURVEY
+                    </button>
+                  )}
+                  {inspectedObject === 'dome' && (
+                    <button
+                      onClick={cycleAirlock}
+                      className="px-3 py-1.5 rounded-xl bg-cyan-700 hover:bg-cyan-600 text-white text-[10px] font-mono font-black shadow-md transition-all cursor-pointer active:scale-95"
+                    >
+                      TEST AIRLOCK
+                    </button>
+                  )}
+                  {inspectedObject === 'solar' && (
+                    <button
+                      onClick={realignSolar}
+                      className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-mono font-black shadow-md transition-all cursor-pointer active:scale-95"
+                    >
+                      REALIGN CELLS
+                    </button>
+                  )}
+                  {inspectedObject === 'antenna' && (
+                    <button
+                      onClick={pingMissionControl}
+                      className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-mono font-black shadow-md transition-all cursor-pointer active:scale-95"
+                    >
+                      PING DSN
+                    </button>
+                  )}
+                  {inspectedObject === 'lifesupport' && (
+                    <>
+                      <button
+                        onClick={ventCO2}
+                        className="px-3 py-1.5 rounded-xl bg-cyan-700 hover:bg-cyan-600 text-white text-[10px] font-mono font-black shadow-md transition-all cursor-pointer active:scale-95"
+                      >
+                        💨 PURGE CO₂
+                      </button>
+                      <button
+                        onClick={boostISRU}
+                        className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-mono font-black shadow-md transition-all cursor-pointer active:scale-95"
+                      >
+                        ⚡ BOOST ISRU
+                      </button>
+                    </>
+                  )}
+                  {inspectedObject === 'tanks' && (
+                    <>
+                      <button
+                        onClick={ventCryoValve}
+                        className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-mono font-black shadow-md transition-all cursor-pointer active:scale-95"
+                      >
+                        💧 VENT VALVE
+                      </button>
+                      <button
+                        onClick={balanceTanks}
+                        className="px-3 py-1.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-[10px] font-mono font-black shadow-md transition-all cursor-pointer active:scale-95"
+                      >
+                        ⚖️ REBALANCE
+                      </button>
+                    </>
+                  )}
+                  {inspectedObject === 'shield' && (
+                    <>
+                      <button
+                        onClick={() => soundFx.playBeep(440, 0.2)}
+                        className="px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-[10px] font-mono font-black shadow-md transition-all cursor-pointer active:scale-95"
+                      >
+                        ⚡ DEFLECTION PULSE
+                      </button>
+                      <button
+                        onClick={sinterShield}
+                        className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-mono font-black shadow-md transition-all cursor-pointer active:scale-95"
+                      >
+                        🪨 SINTER +5CM
+                      </button>
+                    </>
+                  )}
+                  {inspectedObject === 'celestial' && (
+                    <button
+                      onClick={pingMissionControl}
+                      className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-mono font-black shadow-md transition-all cursor-pointer active:scale-95"
+                    >
+                      🛰️ {isMoon ? 'HAIL HOUSTON' : 'RELAY TELEMETRY'}
+                    </button>
+                  )}
+                  {inspectedObject === 'boulder' && (
+                    <button
+                      onClick={analyzeBoulder}
+                      className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-mono font-black shadow-md transition-all cursor-pointer active:scale-95"
+                    >
+                      🔬 ANALYZE CORE (+2t)
+                    </button>
+                  )}
+                  {inspectedCrewMember && (
+                    <>
+                      <button
+                        onClick={saluteCrew}
+                        className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-mono font-black shadow-md transition-all cursor-pointer active:scale-95 flex items-center gap-1"
+                        title="Salute astronaut at station"
+                      >
+                        <span>🫡</span>
+                        <span>SALUTE</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          soundFx.playClick();
+                          setShowCrewModal(true);
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-cyan-700 hover:bg-cyan-600 text-white text-[10px] font-mono font-black shadow-md transition-all cursor-pointer active:scale-95 flex items-center gap-1"
+                        title="View complete bio-telemetry and role details"
+                      >
+                        <span>📋</span>
+                        <span>BIO & ROLES</span>
+                      </button>
+                    </>
+                  )}
                   <button
-                    onClick={dispatchRover}
-                    className="px-3 py-1.5 rounded-xl bg-linear-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white text-[10px] font-mono font-black shadow-md transition-all"
+                    onClick={() => setInspectedObject(null)}
+                    className="w-7 h-7 flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono cursor-pointer"
                   >
-                    DISPATCH SURVEY
+                    ✕
                   </button>
-                )}
-                {inspectedObject === 'dome' && (
-                  <button
-                    onClick={cycleAirlock}
-                    className="px-3 py-1.5 rounded-xl bg-cyan-700 hover:bg-cyan-600 text-white text-[10px] font-mono font-black shadow-md transition-all"
-                  >
-                    TEST AIRLOCK
-                  </button>
-                )}
-                {inspectedObject === 'solar' && (
-                  <button
-                    onClick={realignSolar}
-                    className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-mono font-black shadow-md transition-all"
-                  >
-                    REALIGN CELLS
-                  </button>
-                )}
-                {inspectedObject === 'antenna' && (
-                  <button
-                    onClick={pingMissionControl}
-                    className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-mono font-black shadow-md transition-all"
-                  >
-                    PING EARTH
-                  </button>
-                )}
-                {inspectedObject === 'crew' && (
-                  <button
-                    onClick={saluteCrew}
-                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-mono font-black shadow-md transition-all"
-                  >
-                    SALUTE
-                  </button>
-                )}
-                <button
-                  onClick={() => setInspectedObject(null)}
-                  className="w-7 h-7 flex items-center justify-center rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono"
-                >
-                  ✕
-                </button>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Log ticker */}
-          <div className="w-full max-w-md bg-slate-900/60 border border-slate-700/40 rounded-xl backdrop-blur-sm shrink-0">
+          <div className="mt-2 w-full bg-slate-900/60 border border-slate-700/40 rounded-xl backdrop-blur-sm shrink-0">
             <LogTicker logs={state.logs} />
           </div>
         </div>
 
-        {/* ─── RIGHT: Actions + Crew ─── */}
-        <div className="relative z-10 w-52 shrink-0 flex flex-col gap-2 p-3 bg-slate-950/60 backdrop-blur-lg border-l border-slate-800/60 overflow-y-auto">
-          <div className="text-[9px] font-black text-cyan-400 font-mono uppercase tracking-widest mb-1">Commander</div>
-
-          {/* Shelter button */}
-          <button onClick={toggleShelter} className={`w-full p-3 rounded-2xl border font-mono font-black text-sm transition-all flex items-center gap-2.5 ${resources.stormShelterActive ? 'bg-indigo-700/80 border-indigo-400 text-white shadow-[0_0_20px_rgba(99,102,241,0.5)]'
-              : state.activeHazards.find(h => h.type === 'solar-flare') ? 'bg-red-700/80 border-red-400 text-white animate-bounce shadow-[0_0_20px_rgba(239,68,68,0.5)]'
-                : 'bg-slate-900/60 border-slate-700 text-slate-200 hover:border-red-500/50'
-            }`}>
-            <span className="text-xl">{resources.stormShelterActive ? '🛡️' : '🚨'}</span>
-            <div className="text-left">
-              <div className="text-[11px]">{resources.stormShelterActive ? 'IN SHELTER' : 'STORM SHELTER'}</div>
-              <div className="text-[9px] text-slate-300 font-normal">{resources.stormShelterActive ? 'Protected' : 'Emergency'}</div>
+        {/* ─── RIGHT: Actions & Crew (Collapsible on Cinematic) ─── */}
+        {!isCinematicFullscreen && (
+          <div className="relative z-10 w-52 shrink-0 flex flex-col gap-2 p-3 bg-slate-950/75 backdrop-blur-xl border-l border-slate-800/80 overflow-y-auto">
+            <div className="text-[9px] font-black text-cyan-400 font-mono uppercase tracking-widest mb-1">
+              Commander Actions
             </div>
-          </button>
 
-          {/* Sinter button */}
-          <button onClick={sinterShield} disabled={resources.regolithStored < 5}
-            className={`w-full p-3 rounded-2xl border font-mono font-black transition-all flex items-center gap-2.5 ${resources.regolithStored >= 5 ? 'bg-purple-950/60 border-purple-500/50 text-purple-200 hover:bg-purple-900/50 hover:scale-105 active:scale-95' : 'bg-slate-900/30 border-slate-800 text-slate-600 cursor-not-allowed'
-              }`}>
-            <span className="text-xl">🪨</span>
-            <div className="text-left">
-              <div className="text-[11px]">SINTER SHIELD</div>
-              <div className="text-[9px] font-normal text-slate-400">{resources.regolithStored.toFixed(0)}t / 5t</div>
-            </div>
-          </button>
-
-          {/* Objectives */}
-          <div className="text-[9px] font-black text-emerald-400 font-mono uppercase tracking-widest mt-1 mb-1">Goals</div>
-          <div className="space-y-1.5">
-            {state.objectives.map(obj => (
-              <div key={obj.id} className={`p-2 rounded-xl border text-[10px] font-mono ${obj.completed ? 'bg-emerald-950/60 border-emerald-500/40' : 'bg-slate-900/60 border-slate-700/60'}`}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-slate-200 font-bold truncate">{obj.title.split(' ').slice(0, 3).join(' ')}</span>
-                  {obj.completed && <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />}
-                </div>
-                <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full ${obj.completed ? 'bg-emerald-400' : 'bg-cyan-500'}`}
-                    style={{ width: `${Math.min(100, (obj.currentValue / obj.targetValue) * 100)}%` }} />
-                </div>
+            {/* Shelter button */}
+            <button
+              onClick={toggleShelter}
+              className={`w-full p-2.5 rounded-2xl border font-mono font-black text-sm transition-all flex items-center gap-2.5 ${
+                resources.stormShelterActive
+                  ? 'bg-indigo-700/80 border-indigo-400 text-white shadow-[0_0_20px_rgba(99,102,241,0.5)]'
+                  : hasFlare || hasStorm
+                  ? 'bg-red-700/80 border-red-400 text-white animate-bounce shadow-[0_0_20px_rgba(239,68,68,0.5)]'
+                  : 'bg-slate-900/60 border-slate-700 text-slate-200 hover:border-red-500/50'
+              }`}
+            >
+              <span className="text-xl">{resources.stormShelterActive ? '🛡️' : '🚨'}</span>
+              <div className="text-left">
+                <div className="text-[11px]">{resources.stormShelterActive ? 'IN SHELTER' : 'STORM SHELTER'}</div>
+                <div className="text-[9px] text-slate-300 font-normal">{resources.stormShelterActive ? 'Protected' : 'Emergency'}</div>
               </div>
-            ))}
-          </div>
+            </button>
 
-          {/* Crew */}
-          <div className="text-[9px] font-black text-cyan-400 font-mono uppercase tracking-widest mt-1 mb-1">Crew</div>
-          <div className="space-y-1.5">
-            {crew.map(member => (
-              <div key={member.id} className={`flex items-center gap-2 p-2 rounded-xl border text-[10px] font-mono ${member.status === 'incapacitated' ? 'bg-red-950/60 border-red-500/40 animate-pulse'
-                  : member.status === 'sheltered' ? 'bg-indigo-950/60 border-indigo-500/40'
-                    : 'bg-slate-900/60 border-slate-700/60'
+            {/* Sinter button */}
+            <button
+              onClick={sinterShield}
+              disabled={resources.regolithStored < 5}
+              className={`w-full p-2.5 rounded-2xl border font-mono font-black transition-all flex items-center gap-2.5 ${
+                resources.regolithStored >= 5
+                  ? 'bg-purple-950/60 border-purple-500/50 text-purple-200 hover:bg-purple-900/50 hover:scale-105 active:scale-95'
+                  : 'bg-slate-900/30 border-slate-800 text-slate-600 cursor-not-allowed'
+              }`}
+            >
+              <span className="text-xl">🪨</span>
+              <div className="text-left">
+                <div className="text-[11px]">SINTER SHIELD</div>
+                <div className="text-[9px] font-normal text-slate-400">{resources.regolithStored.toFixed(0)}t / 5t</div>
+              </div>
+            </button>
+
+            {/* Objectives */}
+            <div className="text-[9px] font-black text-emerald-400 font-mono uppercase tracking-widest mt-1 mb-1">
+              Goals
+            </div>
+            <div className="space-y-1.5">
+              {state.objectives.map(obj => (
+                <div key={obj.id} className={`p-2 rounded-xl border text-[10px] font-mono ${
+                  obj.completed ? 'bg-emerald-950/60 border-emerald-500/40' : 'bg-slate-900/60 border-slate-700/60'
                 }`}>
-                <span className="text-lg">{member.avatar}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="font-bold text-slate-200 truncate">{member.name.split(' ')[0]}</div>
-                  <div className="w-full h-1 bg-slate-800 rounded-full mt-0.5">
-                    <div className={`h-full rounded-full ${member.health > 50 ? 'bg-emerald-400' : 'bg-red-500'}`}
-                      style={{ width: `${member.health}%` }} />
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-slate-200 font-bold truncate">{obj.title.split(' ').slice(0, 3).join(' ')}</span>
+                    {obj.completed && <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />}
+                  </div>
+                  <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${obj.completed ? 'bg-emerald-400' : 'bg-cyan-500'}`}
+                      style={{ width: `${Math.min(100, (obj.currentValue / obj.targetValue) * 100)}%` }}
+                    />
                   </div>
                 </div>
-                <div className="text-[9px] font-black text-slate-500">{member.status === 'sheltered' ? '🛡️' : member.status === 'incapacitated' ? '❌' : '✅'}</div>
+              ))}
+            </div>
+
+            {/* Crew */}
+            <div className="flex items-center justify-between mt-1 mb-1">
+              <div className="text-[9px] font-black text-cyan-400 font-mono uppercase tracking-widest">
+                Outpost Crew ({crew.length})
               </div>
-            ))}
+              <button
+                onClick={() => {
+                  soundFx.playClick();
+                  setShowCrewModal(true);
+                }}
+                className="text-[8px] font-mono text-cyan-300 hover:text-white px-1.5 py-0.5 rounded bg-cyan-950/60 border border-cyan-500/40 hover:bg-cyan-800/60 transition-all cursor-pointer flex items-center gap-0.5"
+                title="Open Crew Bio-Telemetry and Roles Roster"
+              >
+                <span>Roles</span>
+                <span>↗</span>
+              </button>
+            </div>
+            <div className="space-y-1.5">
+              {crew.map(member => {
+                const isSelected = selectedCrewId === member.id;
+                return (
+                  <button
+                    key={member.id}
+                    onClick={() => {
+                      soundFx.playBeep(880, 0.08);
+                      setSelectedCrewId(member.id);
+                      setInspectedObject(`crew-${member.id}`);
+                      setCameraMode('crew');
+                    }}
+                    className={`w-full text-left p-2 rounded-xl border text-[10px] font-mono transition-all cursor-pointer flex flex-col gap-1 ${
+                      isSelected
+                        ? 'bg-cyan-950/80 border-cyan-400 ring-1 ring-cyan-400/50 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
+                        : member.status === 'incapacitated'
+                        ? 'bg-red-950/60 border-red-500/40 animate-pulse hover:border-red-400'
+                        : member.status === 'sheltered'
+                        ? 'bg-indigo-950/60 border-indigo-500/40 hover:border-indigo-400'
+                        : 'bg-slate-900/60 border-slate-700/60 hover:border-cyan-500/40 hover:bg-slate-800/60'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1.5">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-base shrink-0">{member.avatar}</span>
+                        <div className="min-w-0">
+                          <div className="font-bold text-slate-100 truncate text-[10px] leading-tight">
+                            {member.name}
+                          </div>
+                          <div className="text-[8px] text-cyan-400 truncate font-semibold leading-tight">
+                            {member.role}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-[10px]">
+                        {member.status === 'sheltered' ? '🛡️' : member.status === 'incapacitated' ? '❌' : '✅'}
+                      </div>
+                    </div>
+
+                    <div className="text-[8px] text-slate-400 line-clamp-1 leading-tight font-sans">
+                      {member.specialtySkill}
+                    </div>
+
+                    <div className="w-full flex items-center gap-1.5 mt-0.5">
+                      <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${member.health > 50 ? 'bg-emerald-400' : 'bg-red-500'}`}
+                          style={{ width: `${member.health}%` }}
+                        />
+                      </div>
+                      <span className="text-[8px] text-slate-400 font-mono shrink-0">{member.health}%</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── MODAL: EXIT & MISSION MENU ── */}
+      {showExitConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-2xl">
+          <div className="bg-slate-950 border border-slate-700 rounded-3xl max-w-sm w-full p-6 text-center shadow-2xl space-y-4">
+            <div className="text-4xl">🚀</div>
+            <h3 className="text-lg font-black font-mono text-white">MISSION COMMAND MENU</h3>
+            <p className="text-xs text-slate-400 font-mono">
+              Sol {state.currentSol} • Sustainability {state.sustainabilityScore}% • {isMoon ? 'Moon Base Alpha' : 'Mars Outpost Prime'}
+            </p>
+
+            <div className="space-y-2 pt-2">
+              <button
+                onClick={() => { soundFx.playClick(); setShowExitConfirm(false); }}
+                className="w-full py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-mono font-black text-xs transition-all shadow-md"
+              >
+                RESUME MISSION
+              </button>
+              <button
+                onClick={() => {
+                  soundFx.playClick();
+                  setShowExitConfirm(false);
+                  onSelectPlanetScreen();
+                }}
+                className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-mono font-black text-xs transition-all"
+              >
+                SWITCH PLANET / RESTART
+              </button>
+              <button
+                onClick={() => {
+                  soundFx.playClick();
+                  setShowExitConfirm(false);
+                  onExitToMenu();
+                }}
+                className="w-full py-2.5 rounded-xl bg-red-950/60 hover:bg-red-900/60 border border-red-800 text-red-200 font-mono font-black text-xs transition-all"
+              >
+                ABORT TO MAIN MENU
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* ── MODAL: HOW TO PLAY QUICK GUIDE ── */}
+      {showHowToPlay && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-2xl">
+          <div className="bg-slate-950 border border-cyan-500/40 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">📖</span>
+                <h3 className="text-sm font-black font-mono text-white">CADET FIELD MANUAL</h3>
+              </div>
+              <button
+                onClick={() => setShowHowToPlay(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-xl bg-slate-800 text-slate-300 text-xs"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs font-mono">
+              <div className="p-3 rounded-2xl bg-amber-950/40 border border-amber-500/40">
+                <div className="font-black text-amber-300 flex items-center gap-1.5 mb-1">
+                  <span>⚡</span> 1. POWER IS LIFE (DAY vs NIGHT)
+                </div>
+                <p className="text-slate-300 text-[11px] leading-relaxed">
+                  • <strong>Daytime:</strong> Ultraflex Solar generates +12kW. Recharge your batteries!<br />
+                  • <strong>Nighttime:</strong> Solar produces <strong>0kW</strong>. You MUST turn ON Kilopower Fission (+10kW) or your batteries will drain and life support will fail!
+                </p>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-cyan-950/40 border border-cyan-500/40">
+                <div className="font-black text-cyan-300 flex items-center gap-1.5 mb-1">
+                  <span>💨</span> 2. BREATHING & ECLSS
+                </div>
+                <p className="text-slate-300 text-[11px] leading-relaxed">
+                  Keep Sabatier O₂ active. If CO₂ exceeds 1800 ppm, turn ON Amine Thermal scrubbers immediately!
+                </p>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-red-950/40 border border-red-500/40">
+                <div className="font-black text-red-300 flex items-center gap-1.5 mb-1">
+                  <span>🌪️</span> 3. WEATHER & HAZARDS
+                </div>
+                <p className="text-slate-300 text-[11px] leading-relaxed">
+                  • When a Solar Flare or Dust Storm hits, click <strong>IN SHELTER</strong> immediately!<br />
+                  • Gather regolith with the Rover and click <strong>SINTER SHIELD</strong> to permanently block radiation.
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowHowToPlay(false)}
+              className="w-full py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-mono font-black text-xs transition-all shadow-md mt-2"
+            >
+              GOT IT, COMMANDER! 🚀
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: CREW ROSTER & ASSIGNMENTS ── */}
+      <CrewManagementModal
+        isOpen={showCrewModal}
+        crew={crew}
+        onAssignCrew={handleAssignCrew}
+        onClose={() => setShowCrewModal(false)}
+      />
     </div>
   );
 }
@@ -1197,6 +1972,8 @@ export default function App() {
           isMuted={isMuted}
           setIsMuted={setIsMuted}
           onLearn={() => { soundFx.playBeep(); setShowLearn(true); }}
+          onExitToMenu={() => { soundFx.playClick(); setScreen('home'); }}
+          onSelectPlanetScreen={() => { soundFx.playClick(); setScreen('select'); }}
         />
       )}
       {showLearn && <LearnModal onClose={() => setShowLearn(false)} />}

@@ -131,7 +131,7 @@ function HomeScreen({ onEnter }: { onEnter: () => void }) {
 // ════════════════════════════════════════════════════════════
 // PLANET SELECT SCREEN
 // ════════════════════════════════════════════════════════════
-function PlanetSelectScreen({ onSelect }: { onSelect: (loc: OutpostLocation) => void }) {
+function PlanetSelectScreen({ onSelect, onBack }: { onSelect: (loc: OutpostLocation) => void; onBack: () => void }) {
   const [hovered, setHovered] = useState<OutpostLocation | null>(null);
   const [selected, setSelected] = useState<OutpostLocation | null>(null);
 
@@ -181,6 +181,17 @@ function PlanetSelectScreen({ onSelect }: { onSelect: (loc: OutpostLocation) => 
       <div className="absolute top-0 left-0 right-0 h-32 bg-linear-to-b from-slate-950 to-transparent" />
 
       <div className="relative z-10 h-full flex flex-col items-center justify-center gap-8 px-6">
+        {/* Back button */}
+        <button
+          onClick={() => { soundFx.playClick(); onBack(); }}
+          className="absolute top-6 left-6 flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-700 bg-slate-900/80 backdrop-blur-md text-slate-400 hover:text-white hover:border-slate-500 transition-all duration-200 text-xs font-mono font-bold group"
+        >
+          <svg className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          BACK
+        </button>
+
         <FadeIn>
           <div className="text-center mb-2">
             <div className="text-[11px] font-mono text-cyan-400 tracking-[0.3em] uppercase mb-2">Step 1 of 2</div>
@@ -869,7 +880,7 @@ export default function App() {
   return (
     <>
       {screen === 'home' && <HomeScreen onEnter={handleEnterHome} />}
-      {screen === 'select' && <PlanetSelectScreen onSelect={handleSelectPlanet} />}
+      {screen === 'select' && <PlanetSelectScreen onSelect={handleSelectPlanet} onBack={() => setScreen('home')} />}
       {screen === 'briefing' && <BriefingScreen location={location} onStart={handleStartMission} />}
       {screen === 'game' && (
         <GameHUD

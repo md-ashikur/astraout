@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useRef, useMemo, useEffect } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Stars, MeshDistortMaterial, Float, Sphere, Ring } from '@react-three/drei';
+import React, { useRef } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { Stars, Float } from '@react-three/drei';
 import * as THREE from 'three';
 
 // ── Floating Asteroid ──────────────────────────────────────
@@ -37,21 +37,24 @@ function FloatingAsteroid({
   );
 }
 
+// Pre-computed once at module load – avoids Math.random during render
+const DUST_COUNT = 500;
+const DUST_POSITIONS = (() => {
+  const pos = new Float32Array(DUST_COUNT * 3);
+  for (let i = 0; i < DUST_COUNT; i++) {
+    const radius = 5 + Math.random() * 15;
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1);
+    pos[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+    pos[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+    pos[i * 3 + 2] = radius * Math.cos(phi) - 10;
+  }
+  return pos;
+})();
+
 // ── Particle Dust Field ─────────────────────────────────────
 function ParticleDust() {
-  const count = 500;
-  const positions = useMemo(() => {
-    const pos = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
-      const radius = 5 + Math.random() * 15;
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(2 * Math.random() - 1);
-      pos[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
-      pos[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
-      pos[i * 3 + 2] = radius * Math.cos(phi) - 10;
-    }
-    return pos;
-  }, []);
+  const positions = DUST_POSITIONS;
 
   const ref = useRef<THREE.Points>(null);
   useFrame((state) => {

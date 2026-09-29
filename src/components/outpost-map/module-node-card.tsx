@@ -1,5 +1,5 @@
 import React from 'react';
-import { Power, Wrench, ArrowUpCircle, Info, Zap, Shield, HeartPulse } from 'lucide-react';
+import { Power, Wrench, ArrowUpCircle, Info, Zap, HeartPulse } from 'lucide-react';
 import { OutpostModule } from '../../engine/simulation-types';
 import { soundFx } from '../../audio/sound-synthesizer';
 
@@ -91,11 +91,10 @@ export const ModuleNodeCard: React.FC<ModuleNodeCardProps> = ({
             soundFx.playClick();
             onToggleActive(module.id);
           }}
-          className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-            module.isActive
+          className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${module.isActive
               ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_0_10px_rgba(16,185,129,0.3)]'
               : 'bg-slate-800 hover:bg-slate-700 text-slate-400'
-          }`}
+            }`}
         >
           <Power className="w-3.5 h-3.5" />
           {module.isActive ? 'Active' : 'Standby'}
@@ -128,11 +127,10 @@ export const ModuleNodeCard: React.FC<ModuleNodeCardProps> = ({
                 ? `Upgrade module to Tier ${module.level + 1}`
                 : `Requires ${module.buildCost.regolith}t regolith`
             }
-            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-              canAffordUpgrade
-                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-lg'
+            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${canAffordUpgrade
+                ? 'bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-lg'
                 : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-            }`}
+              }`}
           >
             <ArrowUpCircle className="w-3.5 h-3.5" />
             Upgrade ({module.buildCost.regolith}t)

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Zap, Power, AlertTriangle, ShieldCheck, Sun, Flame } from 'lucide-react';
+import { Zap, Power, AlertTriangle, ShieldCheck, Sun } from 'lucide-react';
 import { OutpostModule, OutpostResources } from '../../engine/simulation-types';
 import { soundFx } from '../../audio/sound-synthesizer';
 

@@ -19,7 +19,7 @@ export function calculateLifeSupport(
   
   // Daily consumption rates (per sol)
   const o2NeededDaily = activeCrewCount * 0.84; // kg/sol
-  const co2ProducedDaily = activeCrewCount * 1.0; // kg/sol converted to ~250 ppm rise per crew
+  // co2ProducedDaily = activeCrewCount * 1.0 (unused – CO2 rise is modelled directly via co2DeltaPpm)
   const waterNeededDaily = activeCrewCount * 2.5; // L/sol
 
   const o2Consumed = o2NeededDaily * dt;
@@ -54,7 +54,7 @@ export function calculateLifeSupport(
     const scrubRate = 350 * (cdraModule.health / 100) * cdraModule.level;
     co2DeltaPpm -= scrubRate * dt;
   }
-  let newCO2Level = Math.max(400, Math.round(resources.co2Level + co2DeltaPpm));
+  const newCO2Level = Math.max(400, Math.round(resources.co2Level + co2DeltaPpm));
 
   // Water Recycling (ISS Water Recovery System)
   let recyclingEff = 0.65; // Base passive condensation
@@ -67,7 +67,7 @@ export function calculateLifeSupport(
   if (newWaterReserve > resources.waterCapacity) newWaterReserve = resources.waterCapacity;
 
   // Thermal management
-  let targetTemp = 21.5;
+  const targetTemp = 21.5;
   let tempDelta = 0;
   if (!hasPower) {
     // Habitat rapidly loses heat to space/night

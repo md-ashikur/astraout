@@ -272,7 +272,7 @@ function Ground({ isMars }: { isMars: boolean }) {
 }
 
 // ── Habitat Dome ──────────────────────────────────────────────
-function HabitatDome({ health, isMars }: { health: number; isMars: boolean }) {
+function HabitatDome({ health: _health, isMars }: { health: number; isMars: boolean }) {
   const innerRef = useRef<THREE.PointLight>(null);
   const domeTexture = useMemo(() => makeDomeTexture(), []);
   const metalTex = useMemo(() => makeMetalTexture('#374151'), []);
@@ -564,7 +564,7 @@ function LifeSupportModule({ isMars }: { isMars: boolean }) {
 }
 
 // ── Water / oxygen tanks ───────────────────────────────────────
-function StorageTanks({ isMars }: { isMars: boolean }) {
+function StorageTanks({ isMars: _isMars }: { isMars: boolean }) {
   const metalTex = useMemo(() => makeMetalTexture('#94a3b8'), []);
   return (
     <group position={[-0.5, -0.04, 0.6]}>
@@ -601,7 +601,7 @@ function StorageTanks({ isMars }: { isMars: boolean }) {
 }
 
 // ── Rover ──────────────────────────────────────────────────────
-function Rover({ isMars }: { isMars: boolean }) {
+function Rover({ isMars: _isMars }: { isMars: boolean }) {
   const ref = useRef<THREE.Group>(null);
   const metalTex = useMemo(() => makeMetalTexture('#374151'), []);
   const cellTex = useMemo(() => makeSolarCellTexture(), []);

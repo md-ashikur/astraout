@@ -16,7 +16,7 @@ export function calculateRadiation(
   // Baseline cosmic ray background (mSv/hr)
   // Moon has 0 atmosphere: ~0.06 mSv/hr
   // Mars has thin CO2 atmosphere: ~0.03 mSv/hr
-  let baseAmbient = location === 'moon' ? 0.06 : 0.03;
+  const baseAmbient = location === 'moon' ? 0.06 : 0.03;
 
   // Add solar storm hazard multiplier
   let hazardMultiplier = 1.0;

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sun, Moon, Volume2, VolumeX, BookOpen, Compass, Award, ShieldAlert } from 'lucide-react';
+import { Sun, Moon, Volume2, VolumeX, BookOpen, Compass, Award } from 'lucide-react';
 import { OutpostLocation, SimulationSpeed } from '../../engine/simulation-types';
 import { SpeedController } from './speed-controller';
 import { soundFx } from '../../audio/sound-synthesizer';
@@ -49,7 +49,7 @@ export const MissionHeader: React.FC<MissionHeaderProps> = ({
     <header className="w-full bg-slate-950/90 border-b border-cyan-500/30 backdrop-blur-xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-slate-100 shadow-[0_4px_25px_rgba(0,0,0,0.6)] sticky top-0 z-40">
       {/* Brand & Mission Selector */}
       <div className="flex items-center gap-3">
-        <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-600 via-blue-700 to-indigo-900 border border-cyan-400/50 shadow-[0_0_15px_rgba(6,182,212,0.4)]">
+        <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-linear-to-br from-cyan-600 via-blue-700 to-indigo-900 border border-cyan-400/50 shadow-[0_0_15px_rgba(6,182,212,0.4)]">
           <Compass className="w-6 h-6 text-cyan-200 animate-[spin_20s_linear_infinite]" />
         </div>
 
@@ -72,11 +72,10 @@ export const MissionHeader: React.FC<MissionHeaderProps> = ({
               soundFx.playClick();
               onLocationChange('moon');
             }}
-            className={`px-2.5 py-1 text-xs font-mono rounded transition-all flex items-center gap-1.5 ${
-              location === 'moon'
+            className={`px-2.5 py-1 text-xs font-mono rounded transition-all flex items-center gap-1.5 ${location === 'moon'
                 ? 'bg-slate-700 text-cyan-300 shadow-[0_0_8px_rgba(103,232,249,0.3)] font-semibold'
                 : 'text-slate-400 hover:text-slate-200'
-            }`}
+              }`}
           >
             <Moon className="w-3.5 h-3.5" />
             Moon (Artemis)
@@ -86,11 +85,10 @@ export const MissionHeader: React.FC<MissionHeaderProps> = ({
               soundFx.playClick();
               onLocationChange('mars');
             }}
-            className={`px-2.5 py-1 text-xs font-mono rounded transition-all flex items-center gap-1.5 ${
-              location === 'mars'
+            className={`px-2.5 py-1 text-xs font-mono rounded transition-all flex items-center gap-1.5 ${location === 'mars'
                 ? 'bg-red-950/80 text-orange-300 border border-red-500/40 shadow-[0_0_8px_rgba(239,68,68,0.3)] font-semibold'
                 : 'text-slate-400 hover:text-slate-200'
-            }`}
+              }`}
           >
             <Sun className="w-3.5 h-3.5 text-orange-400" />
             Mars (Ares)
@@ -161,11 +159,10 @@ export const MissionHeader: React.FC<MissionHeaderProps> = ({
         <button
           onClick={onToggleMute}
           title={isMuted ? 'Unmute telemetry sound effects' : 'Mute sound effects'}
-          className={`p-2 rounded-lg border transition-all ${
-            isMuted
+          className={`p-2 rounded-lg border transition-all ${isMuted
               ? 'bg-slate-900 border-slate-800 text-slate-500'
               : 'bg-slate-900/90 border-cyan-500/30 text-cyan-300 hover:bg-slate-800'
-          }`}
+            }`}
         >
           {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
         </button>
@@ -176,7 +173,7 @@ export const MissionHeader: React.FC<MissionHeaderProps> = ({
             soundFx.playClick();
             onOpenFieldGuide();
           }}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-mono text-xs font-bold shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-all hover:scale-105 active:scale-95"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-linear-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-mono text-xs font-bold shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-all hover:scale-105 active:scale-95"
         >
           <BookOpen className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">NASA Guide</span>

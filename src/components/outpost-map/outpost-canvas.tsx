@@ -9,7 +9,6 @@ import {
   Sprout,
   Shield,
   Layers,
-  Sparkles,
 } from 'lucide-react';
 import { OutpostLocation, OutpostModule, Astronaut } from '../../engine/simulation-types';
 import { PlanetarySkybox } from './planetary-skybox';
@@ -66,11 +65,10 @@ export const OutpostCanvas: React.FC<OutpostCanvasProps> = ({
 
       {/* Surface Base Map Area */}
       <div
-        className={`relative w-full min-h-[380px] p-6 select-none transition-colors duration-1000 ${
-          isMoon
-            ? 'bg-gradient-to-b from-slate-900 via-slate-950 to-neutral-950'
-            : 'bg-gradient-to-b from-stone-900 via-stone-950 to-red-950/60'
-        }`}
+        className={`relative w-full min-h-[380px] p-6 select-none transition-colors duration-1000 ${isMoon
+            ? 'bg-linear-to-b from-slate-900 via-slate-950 to-neutral-950'
+            : 'bg-linear-to-b from-stone-900 via-stone-950 to-red-950/60'
+          }`}
       >
         {/* Subtle grid pattern overlay */}
         <div className="absolute inset-0 opacity-15 bg-[radial-gradient(#38bdf8_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none" />
@@ -97,38 +95,35 @@ export const OutpostCanvas: React.FC<OutpostCanvasProps> = ({
                   soundFx.playClick();
                   setSelectedModuleId(mod.id);
                 }}
-                className={`relative flex flex-col items-center justify-between p-3 rounded-xl border text-center transition-all duration-200 group ${
-                  isSelected
+                className={`relative flex flex-col items-center justify-between p-3 rounded-xl border text-center transition-all duration-200 group ${isSelected
                     ? 'bg-cyan-950/70 border-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.4)] scale-105 z-20'
                     : mod.isActive
-                    ? 'bg-slate-900/80 border-slate-700/80 hover:border-cyan-500/50 hover:bg-slate-800/90'
-                    : 'bg-slate-950/60 border-slate-800 opacity-60 hover:opacity-100'
-                }`}
+                      ? 'bg-slate-900/80 border-slate-700/80 hover:border-cyan-500/50 hover:bg-slate-800/90'
+                      : 'bg-slate-950/60 border-slate-800 opacity-60 hover:opacity-100'
+                  }`}
               >
                 {/* Status Dot */}
                 <div className="absolute top-2 right-2 flex items-center gap-1">
                   <span
-                    className={`w-2 h-2 rounded-full ${
-                      mod.isActive
+                    className={`w-2 h-2 rounded-full ${mod.isActive
                         ? mod.health > 50
                           ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]'
                           : 'bg-amber-400 animate-pulse'
                         : 'bg-slate-600'
-                    }`}
+                      }`}
                   />
                 </div>
 
                 {/* Module Icon Container */}
                 <div
-                  className={`w-11 h-11 rounded-xl flex items-center justify-center mb-2 transition-transform group-hover:scale-110 ${
-                    mod.id.includes('greenhouse')
+                  className={`w-11 h-11 rounded-xl flex items-center justify-center mb-2 transition-transform group-hover:scale-110 ${mod.id.includes('greenhouse')
                       ? 'bg-emerald-950/80 border border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
                       : mod.id.includes('kilopower')
-                      ? 'bg-orange-950/80 border border-orange-500/40 shadow-[0_0_12px_rgba(249,115,22,0.3)]'
-                      : mod.id.includes('solar')
-                      ? 'bg-amber-950/80 border border-amber-500/40'
-                      : 'bg-slate-800/90 border border-slate-700'
-                  }`}
+                        ? 'bg-orange-950/80 border border-orange-500/40 shadow-[0_0_12px_rgba(249,115,22,0.3)]'
+                        : mod.id.includes('solar')
+                          ? 'bg-amber-950/80 border border-amber-500/40'
+                          : 'bg-slate-800/90 border border-slate-700'
+                    }`}
                 >
                   {getModuleIcon(mod.category, mod.id)}
                 </div>
@@ -166,13 +161,12 @@ export const OutpostCanvas: React.FC<OutpostCanvasProps> = ({
           {crew.map((member) => (
             <div
               key={member.id}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-mono backdrop-blur-md transition-all ${
-                member.status === 'eva-repair'
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-mono backdrop-blur-md transition-all ${member.status === 'eva-repair'
                   ? 'bg-amber-950/80 border-amber-500/60 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.3)] animate-pulse'
                   : member.status === 'sheltered'
-                  ? 'bg-indigo-950/80 border-indigo-500/60 text-indigo-300'
-                  : 'bg-slate-900/80 border-slate-800 text-slate-300'
-              }`}
+                    ? 'bg-indigo-950/80 border-indigo-500/60 text-indigo-300'
+                    : 'bg-slate-900/80 border-slate-800 text-slate-300'
+                }`}
             >
               <span className="text-sm">{member.avatar}</span>
               <span className="font-semibold">{member.name.split(' ')[0]}</span>

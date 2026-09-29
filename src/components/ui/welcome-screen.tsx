@@ -2,7 +2,7 @@
 
 import React, { useState, Suspense } from 'react';
 import dynamic from 'next/dynamic';
-import { Rocket, ChevronRight, Star, Globe } from 'lucide-react';
+import { ChevronRight, Star } from 'lucide-react';
 import { OutpostLocation } from '../../engine/simulation-types';
 
 const PlanetScene = dynamic(
@@ -27,7 +27,7 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
       </div>
 
       {/* Gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-radial from-transparent via-slate-950/60 to-slate-950/90" />
+      <div className="absolute inset-0 bg-linear-radial from-transparent via-slate-950/60 to-slate-950/90" />
 
       {/* Content */}
       <div className="relative z-10 text-center px-6 max-w-2xl mx-auto">
@@ -40,7 +40,7 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
 
         {/* Title */}
         <h1 className="text-5xl sm:text-7xl font-black text-white font-mono tracking-tight mb-3 drop-shadow-2xl">
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400">
+          <span className="text-transparent bg-clip-text bg-linear-to-r from-cyan-400 via-blue-400 to-purple-400">
             JUNIOR
           </span>
           <br />

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Wind, Activity, Thermometer, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Wind, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { OutpostResources } from '../../engine/simulation-types';
 
 interface LifeSupportGaugeProps {
@@ -11,7 +11,6 @@ export const LifeSupportGauge: React.FC<LifeSupportGaugeProps> = ({
   resources,
   eclssOperational,
 }) => {
-  const o2Percent = Math.min(100, Math.round((resources.o2Reserve / resources.o2Capacity) * 100));
   const isO2Low = resources.o2PartialPressure < 19.0;
   const isCO2High = resources.co2Level > 2000;
   const isCO2Critical = resources.co2Level > 3000;

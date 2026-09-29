@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, ShieldAlert, ZapOff, Wind, Wrench, ArrowRight } from 'lucide-react';
+import { AlertTriangle, ShieldAlert, ZapOff, Wind, Wrench } from 'lucide-react';
 import { SpaceHazard } from '../../engine/simulation-types';
 import { soundFx } from '../../audio/sound-synthesizer';
 

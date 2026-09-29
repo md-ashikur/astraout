@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pause, Play, FastForward } from 'lucide-react';
+import { Pause, Play } from 'lucide-react';
 import { SimulationSpeed } from '../../engine/simulation-types';
 import { soundFx } from '../../audio/sound-synthesizer';
 

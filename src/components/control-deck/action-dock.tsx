@@ -43,7 +43,7 @@ export const ActionDock: React.FC<ActionDockProps> = ({
             soundFx.playClick();
             onOpenBuildModal();
           }}
-          className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-mono text-xs font-bold shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-all hover:scale-105 active:scale-95"
+          className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-linear-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-mono text-xs font-bold shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-all hover:scale-105 active:scale-95"
         >
           <Hammer className="w-4 h-4 text-cyan-200" />
           <span>Expand Outpost</span>
@@ -73,11 +73,10 @@ export const ActionDock: React.FC<ActionDockProps> = ({
               ? 'Sinter 5 cm of planetary rock shell over habitat modules (Costs 5t regolith)'
               : 'Requires 5t mined regolith to sinter'
           }
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl font-mono text-xs font-bold transition-all ${
-            canSinter
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl font-mono text-xs font-bold transition-all ${canSinter
               ? 'bg-purple-900/80 hover:bg-purple-800 text-purple-200 border border-purple-500/50 shadow-[0_0_12px_rgba(168,85,247,0.3)] hover:scale-105 active:scale-95'
               : 'bg-slate-900/50 text-slate-500 border border-slate-800 cursor-not-allowed'
-          }`}
+            }`}
         >
           <Layers className="w-4 h-4 text-purple-400" />
           <span>Sinter Shield (+5cm)</span>
@@ -120,11 +119,10 @@ export const ActionDock: React.FC<ActionDockProps> = ({
             }
             onToggleStormShelter();
           }}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-mono text-xs font-bold transition-all ${
-            stormShelterActive
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-mono text-xs font-bold transition-all ${stormShelterActive
               ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-[0_0_15px_rgba(99,102,241,0.5)] animate-pulse'
               : 'bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-500/50 shadow-[0_0_10px_rgba(239,68,68,0.3)]'
-          }`}
+            }`}
         >
           {stormShelterActive ? (
             <>

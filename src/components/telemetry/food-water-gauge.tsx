@@ -49,7 +49,7 @@ export const FoodWaterGauge: React.FC<FoodWaterGaugeProps> = ({ resources }) => 
         </div>
         <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden p-0.5">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-teal-400 shadow-[0_0_8px_rgba(16,185,129,0.5)] transition-all duration-500"
+            className="h-full rounded-full bg-linear-to-r from-emerald-600 to-teal-400 shadow-[0_0_8px_rgba(16,185,129,0.5)] transition-all duration-500"
             style={{ width: `${resources.cropHarvestProgress}%` }}
           />
         </div>

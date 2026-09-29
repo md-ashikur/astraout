@@ -67,7 +67,7 @@ export const RadiationShieldGauge: React.FC<RadiationShieldGaugeProps> = ({ reso
         </div>
         <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden p-0.5">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-purple-600 to-indigo-400 shadow-[0_0_8px_rgba(168,85,247,0.5)] transition-all duration-500"
+            className="h-full rounded-full bg-linear-to-r from-purple-600 to-indigo-400 shadow-[0_0_8px_rgba(168,85,247,0.5)] transition-all duration-500"
             style={{ width: `${Math.min(100, (resources.shieldingThicknessCm / 50) * 100)}%` }}
           />
         </div>
@@ -82,9 +82,8 @@ export const RadiationShieldGauge: React.FC<RadiationShieldGaugeProps> = ({ reso
         <div className="bg-slate-950/60 rounded-lg p-1.5 border border-slate-800">
           <div className="text-[10px] text-slate-400">Ambient Surface Flux</div>
           <div
-            className={`text-xs font-bold ${
-              isExtremeAmbient ? 'text-rose-400 animate-pulse' : 'text-slate-300'
-            }`}
+            className={`text-xs font-bold ${isExtremeAmbient ? 'text-rose-400 animate-pulse' : 'text-slate-300'
+              }`}
           >
             {resources.ambientRadiation} mSv/h
           </div>
@@ -94,9 +93,8 @@ export const RadiationShieldGauge: React.FC<RadiationShieldGaugeProps> = ({ reso
         <div className="bg-slate-950/60 rounded-lg p-1.5 border border-slate-800">
           <div className="text-[10px] text-slate-400">Habitat Internal Dose</div>
           <div
-            className={`text-xs font-bold ${
-              isHighRadiation ? 'text-amber-400' : 'text-emerald-400'
-            }`}
+            className={`text-xs font-bold ${isHighRadiation ? 'text-amber-400' : 'text-emerald-400'
+              }`}
           >
             {resources.internalRadiation} mSv/h
           </div>

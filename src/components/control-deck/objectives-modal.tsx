@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckSquare, CheckCircle2, Circle, Target, Award } from 'lucide-react';
+import { CheckCircle2, Circle, Target, Award } from 'lucide-react';
 import { MissionObjective } from '../../engine/simulation-types';
 
 interface ObjectivesModalProps {

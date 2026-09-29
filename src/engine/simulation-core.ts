@@ -1,4 +1,4 @@
-import { OutpostState, OutpostLocation, SimulationSpeed, Astronaut } from './simulation-types';
+import { OutpostState, OutpostLocation, Astronaut } from './simulation-types';
 import { calculateEnvironment } from './environment-subsystem';
 import { calculatePowerGrid } from './power-subsystem';
 import { calculateLifeSupport } from './life-support-subsystem';
@@ -81,7 +81,7 @@ export function tickSimulation(state: OutpostState, deltaSeconds: number): Outpo
   // 7. Regolith Mining & Sintering
   const sinterBot = hazardResult.updatedModules.find(m => m.id === 'mod-regolith-sinterer' && m.isActive);
   let newRegolithStored = state.resources.regolithStored;
-  let newShieldingThickness = state.resources.shieldingThicknessCm;
+  const newShieldingThickness = state.resources.shieldingThicknessCm;
 
   if (sinterBot && !power.isBlackout) {
     // Dig and sinter regolith

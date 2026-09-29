@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookOpen, Zap, Wind, Radio, Sprout, Compass, ExternalLink } from 'lucide-react';
+import { BookOpen, Zap, Wind, Radio, Sprout, Compass } from 'lucide-react';
 
 interface NasaFieldGuideModalProps {
   isOpen: boolean;
@@ -17,7 +17,7 @@ export const NasaFieldGuideModal: React.FC<NasaFieldGuideModalProps> = ({ isOpen
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-600 text-white shadow-lg">
+            <div className="p-2 rounded-xl bg-linear-to-br from-blue-600 to-cyan-600 text-white shadow-lg">
               <BookOpen className="w-5 h-5" />
             </div>
             <div>
@@ -41,11 +41,10 @@ export const NasaFieldGuideModal: React.FC<NasaFieldGuideModalProps> = ({ isOpen
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3 mb-4 text-xs">
           <button
             onClick={() => setActiveTab('power')}
-            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
-              activeTab === 'power'
+            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${activeTab === 'power'
                 ? 'bg-amber-500 text-slate-950 font-bold shadow-md'
                 : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'
-            }`}
+              }`}
           >
             <Zap className="w-3.5 h-3.5" />
             1. Power Dilemma
@@ -53,11 +52,10 @@ export const NasaFieldGuideModal: React.FC<NasaFieldGuideModalProps> = ({ isOpen
 
           <button
             onClick={() => setActiveTab('eclss')}
-            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
-              activeTab === 'eclss'
+            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${activeTab === 'eclss'
                 ? 'bg-cyan-500 text-slate-950 font-bold shadow-md'
                 : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'
-            }`}
+              }`}
           >
             <Wind className="w-3.5 h-3.5" />
             2. Life Support (ECLSS)
@@ -65,11 +63,10 @@ export const NasaFieldGuideModal: React.FC<NasaFieldGuideModalProps> = ({ isOpen
 
           <button
             onClick={() => setActiveTab('radiation')}
-            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
-              activeTab === 'radiation'
+            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${activeTab === 'radiation'
                 ? 'bg-purple-500 text-slate-950 font-bold shadow-md'
                 : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'
-            }`}
+              }`}
           >
             <Radio className="w-3.5 h-3.5" />
             3. Radiation & Regolith
@@ -77,11 +74,10 @@ export const NasaFieldGuideModal: React.FC<NasaFieldGuideModalProps> = ({ isOpen
 
           <button
             onClick={() => setActiveTab('food')}
-            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
-              activeTab === 'food'
+            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${activeTab === 'food'
                 ? 'bg-emerald-500 text-slate-950 font-bold shadow-md'
                 : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'
-            }`}
+              }`}
           >
             <Sprout className="w-3.5 h-3.5" />
             4. Food & Water Loops
@@ -89,11 +85,10 @@ export const NasaFieldGuideModal: React.FC<NasaFieldGuideModalProps> = ({ isOpen
 
           <button
             onClick={() => setActiveTab('moon-vs-mars')}
-            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
-              activeTab === 'moon-vs-mars'
+            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${activeTab === 'moon-vs-mars'
                 ? 'bg-blue-500 text-slate-950 font-bold shadow-md'
                 : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'
-            }`}
+              }`}
           >
             <Compass className="w-3.5 h-3.5" />
             5. Moon vs Mars

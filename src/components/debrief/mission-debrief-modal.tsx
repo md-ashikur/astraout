@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import confetti from 'canvas-confetti';
-import { Award, AlertTriangle, RotateCcw, Compass, CheckCircle2, XCircle } from 'lucide-react';
+import { Award, AlertTriangle, RotateCcw, Compass } from 'lucide-react';
 import { OutpostLocation, OutpostState } from '../../engine/simulation-types';
 import { soundFx } from '../../audio/sound-synthesizer';
 

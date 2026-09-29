@@ -1,5 +1,5 @@
 import React from 'react';
-import { Hammer, Sun, Flame, Zap, Sprout, Droplets, Check, Plus, AlertCircle } from 'lucide-react';
+import { Hammer, Sun, Flame, Zap, Sprout, Droplets, Check, Plus } from 'lucide-react';
 import { OutpostLocation, OutpostModule } from '../../engine/simulation-types';
 import { soundFx } from '../../audio/sound-synthesizer';
 
@@ -136,11 +136,10 @@ export const ModuleConstructionModal: React.FC<ModuleConstructionModalProps> = (
             return (
               <div
                 key={tpl.id}
-                className={`p-4 rounded-xl border transition-all ${
-                  alreadyBuilt
+                className={`p-4 rounded-xl border transition-all ${alreadyBuilt
                     ? 'bg-slate-950/50 border-slate-800 opacity-60'
                     : 'bg-slate-950/80 border-slate-800 hover:border-cyan-500/50'
-                }`}
+                  }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
@@ -197,11 +196,10 @@ export const ModuleConstructionModal: React.FC<ModuleConstructionModalProps> = (
                             gridPosition: { x: Math.floor(Math.random() * 5) + 1, y: Math.floor(Math.random() * 5) + 1 },
                           });
                         }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
-                          canAfford
-                            ? 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white shadow-lg'
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${canAfford
+                            ? 'bg-linear-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white shadow-lg'
                             : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                        }`}
+                          }`}
                       >
                         <Plus className="w-3.5 h-3.5" />
                         Construct
